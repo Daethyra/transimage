@@ -3,6 +3,7 @@ This module provides a class for converting images to different formats using Pi
 """
 
 import os
+
 from PIL import Image
 
 
@@ -49,7 +50,7 @@ class ImageConverter:
 
         if input_ext == output_ext:
             # If the input and output formats are the same, move the file instead of re-saving it
-            ## self._move_or_error()
+            # self._move_or_error()
             print(
                 f"Skipping conversion for {self.input_path} (already in {self.output_format} format)"
             )
@@ -63,18 +64,18 @@ class ImageConverter:
 
     def _convert_to_jpg(self, input_ext: str, output_ext: str) -> None:
         img = Image.open(self.input_path)
-        
+
         # Ensure the output format is actually JPG
         if output_ext.lower() != 'jpg':
             output_ext = 'jpg'
-        
+
         # Save transparency metadata for palette images w/ transparency
         if img.mode == 'P' and img.info.get('transparency'):
             img = img.convert('RGBA')
-        
-        # Convert to RGB 
+
+        # Convert to RGB
         rgb_img = img.convert('RGB')
-        
+
         # Save as JPG with quality 95 (adjust as needed)
         rgb_img.save(self.output_path, 'JPEG', quality=95)
 

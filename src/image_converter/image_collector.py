@@ -4,6 +4,7 @@ This module provides functionality to collect images from a directory.
 
 import os
 from typing import List
+
 from .image_converter import ImageConverter
 
 

@@ -2,11 +2,12 @@
 Main module for image conversion. Handles both single image and directory processing.
 """
 
-import os
 import argparse
+import os
 from typing import List
-from formaverter.image_converter import convert_image
-from formaverter.image_collector import collect_images
+
+from image_converter.image_collector import collect_images
+from image_converter.image_converter import convert_image
 
 
 def process_images(input_path: str, output_path: str, output_format: str) -> List[str]:
