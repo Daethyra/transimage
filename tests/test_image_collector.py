@@ -8,8 +8,8 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 )
 
-from formaverter.image_collector import collect_images
-from formaverter.image_converter import ImageConverter
+from image_converter.image_collector import collect_images
+from image_converter.image_converter import ImageConverter
 
 
 class TestImageCollector(unittest.TestCase):

@@ -1,6 +1,6 @@
 [project]
-name = "Formaverter"
-version = "2.0.0"
+name = "image_converter"
+version = "3.0.0"
 description = "Converts images from one format to another using Pillow. Currently supports JPG, PNG, BMP, and WebP."
 authors = [
     {name = "Daethyra", email = "109057945+Daethyra@users.noreply.github.com"},
@@ -10,7 +10,7 @@ dependencies = [
 ]
 requires-python = "<4.0,>=3.13"
 readme = "README.md"
-license = {text = "GNU Aferro GPL"}
+license = {text = "MIT"}
 
 [tool.pdm]
 distribution = true
@@ -25,4 +25,5 @@ build-backend = "pdm.backend"
 [dependency-groups]
 dev = [
     "black>=24.10.0",
+    "flake8>=7.1.2",
 ]
