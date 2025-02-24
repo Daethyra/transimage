@@ -6,8 +6,8 @@ import argparse
 import os
 from typing import List
 
-from image_converter.image_collector import collect_images
-from image_converter.image_converter import convert_image
+from pil_image_converter.image_collector import collect_images
+from pil_image_converter.image_converter import convert_image
 
 
 def process_images(input_path: str, output_path: str, output_format: str) -> List[str]:
