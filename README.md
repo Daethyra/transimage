@@ -1,7 +1,7 @@
-# Image_Converter
+# Pillow Image-Format Converter
 
 ## Description
-Image_Converter (Format Converter) is a Python tool that allows you to convert images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
+`pil_image_converter` is a Python package for converting images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
 
 Contributions always welcome!
 
@@ -45,11 +45,11 @@ For batch conversion:
 -> Ex.: `python main.py "./input directory" "./output directory" jpg`
 
 
-### Using the Image_Converter package
+### Using the pil_image_converter package
 
 You can use the Image_Converter package directly from the command line:
 
-`python -m image_converter <input_path> <output_path> <output_format>`
+`python -m pil_image_converter <input_path> <output_path> <output_format>`
 
 - `<input_path>`: Path to the input image file or directory
 - `<output_path>`: Path to save the converted image(s)
@@ -57,13 +57,13 @@ You can use the Image_Converter package directly from the command line:
 
 Example:
 
-`python -m image_converter ./input_image.jpg ./output_image.png png`
+`python -m pil_image_converter ./input_image.jpg ./output_image.png png`
 
 For batch conversion, provide a directory as the input path:
 
-`python -m image_converter ./input_directory ./output_directory png`
+`python -m pil_image_converter ./input_directory ./output_directory png`
 
-### Using Image_Converter in your own projects
+### Using pil_image_converter in your own projects
 
 1. First, ensure you're working within a virtual environment with PDM:
 
@@ -72,7 +72,7 @@ For batch conversion, provide a directory as the input path:
 2. In your Python script, import the necessary functions:
 
 ```python
-from image_converter import collect_images, ImageConverter
+from pil_image_converter import collect_images, ImageConverter
 ```
 
 To convert a single image, use the ImageConverter class directly:
@@ -85,7 +85,7 @@ converter.convert()
 For batch conversion, you can pass in directories as arguments instead of individual image paths. Then, use the collect_images function and loop through the results:
 
 ```python
-from image_converter import collect_images, ImageConverter
+from pil_image_converter import collect_images, ImageConverter
 
 input_directory = 'path/to/input/directory'
 output_directory = 'path/to/output/directory'

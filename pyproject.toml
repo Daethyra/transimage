@@ -1,6 +1,6 @@
 [project]
-name = "image_converter"
-version = "3.0.0"
+name = "pil_image_converter"
+version = "3.0.1"
 description = "Converts images from one format to another using Pillow. Currently supports JPG, PNG, BMP, and WebP."
 authors = [
     {name = "Daethyra", email = "109057945+Daethyra@users.noreply.github.com"},
