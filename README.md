@@ -47,7 +47,7 @@ For batch conversion:
 
 ### Using the pil_image_converter package
 
-You can use the Image_Converter package directly from the command line:
+You can use the pil_image_converter package directly from the command line:
 
 `python -m pil_image_converter <input_path> <output_path> <output_format>`
 
