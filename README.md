@@ -1,7 +1,7 @@
 # Pillow Image-Format Converter
 
 ## Description
-`pil_image_converter` is a Python package for converting images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
+`pil_image_converter` is a Python package and CLI tool for converting images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
 
 Contributions always welcome!
 
