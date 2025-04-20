@@ -64,7 +64,7 @@ if __name__ == "__main__":
         description="Convert images to a specified format."
     )
     parser.add_argument("input_path", help="Path to input image or directory")
-    parser.add_argument("output_path", help="Path to output image or directory")
+    parser.add_argument("output_path", help="Path to output directory. Do not include file name.")
     parser.add_argument(
         "output_format", help="Desired output format (jpg, png, bmp, webp)"
     )
