@@ -9,7 +9,8 @@ from PIL import Image
 
 class ImageConverter:
     SUPPORTED_CONVERSIONS = {
-        ".jpg": {".jpg", ".png", ".bmp", ".webp"},
+        **{ext: {".jpg", ".png", ".bmp", ".webp"}
+           for ext in [".jpg", ".jpeg"]},
         ".png": {".jpg", ".png", ".bmp", ".webp"},
         ".bmp": {".jpg", ".png", ".bmp", ".webp"},
         ".webp": {".jpg", ".png", ".bmp", ".webp"},
