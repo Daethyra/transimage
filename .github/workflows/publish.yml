@@ -1,0 +1,57 @@
+name: Publish Python Package to PyPI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install PDM
+      run: pip install pdm
+
+    - name: Install dependencies
+      run: pdm install -G dev
+
+    - name: Run formatting and linting
+      run: pdm run format lint
+
+    - name: Run tests
+      run: pdm run test
+
+    - name: Build package
+      run: pdm build
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: python-package
+        path: dist/
+
+  publish:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    environment: 
+      name: pypi-publishing
+      url: https://pypi.org/p/transimage
+    
+    permissions:
+      id-token: write  # Isolated to publish job only
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: python-package
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
