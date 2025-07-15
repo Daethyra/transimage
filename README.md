@@ -22,9 +22,9 @@ To set up the development environment:
 1. Clone the repository
 2. Install PDM if you haven't already: `pip install pdm`
 3. Install dependencies: `pdm install`
-4. Convert images: `python src/____main____.py ./input_image.jpg ./output_image.png png`
+4. Convert images: `python src/__main__.py ./input_image.jpg ./output_image.png png`
 
-### Using `____main____.py` directly as a CLI tool (Recommended)
+### Using `__main__.py` directly as a CLI tool (Recommended)
 
 Once you've cloned the repository or downloaded the source code, you can use the `__main__.py` file directly by using the following: `python __main__.py <input_path> <output_path> <output_format>`
 
