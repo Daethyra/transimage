@@ -57,7 +57,7 @@ class ImageConverter:
             return
         else:
             # Handle JPG conversion separately
-            if self.output_format.lower() == 'jpg':
+            if self.output_format.lower() == "jpg":
                 self._convert_to_jpg(input_ext, output_ext)
             else:
                 self._convert_image(input_ext, output_ext)
@@ -66,18 +66,18 @@ class ImageConverter:
         img = Image.open(self.input_path)
 
         # Ensure the output format is actually JPG
-        if output_ext.lower() != 'jpg':
-            output_ext = 'jpg'
+        if output_ext.lower() != "jpg":
+            output_ext = "jpg"
 
         # Save transparency metadata for palette images w/ transparency
-        if img.mode == 'P' and img.info.get('transparency'):
-            img = img.convert('RGBA')
+        if img.mode == "P" and img.info.get("transparency"):
+            img = img.convert("RGBA")
 
         # Convert to RGB
-        rgb_img = img.convert('RGB')
+        rgb_img = img.convert("RGB")
 
         # Save as JPG with quality 95 (adjust as needed)
-        rgb_img.save(self.output_path, 'JPEG', quality=95)
+        rgb_img.save(self.output_path, "JPEG", quality=95)
 
     def _convert_image(self, input_ext: str, output_ext: str) -> None:
         """

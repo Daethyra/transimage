@@ -9,7 +9,7 @@ import unittest
 import tempfile
 import shutil
 from PIL import Image
-from pil_image_converter.image_converter import ImageConverter, convert_image
+from transimage.image_converter import ImageConverter, convert_image
 
 
 class TestImageConverter(unittest.TestCase):
