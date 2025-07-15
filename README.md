@@ -1,9 +1,9 @@
-# Pillow Image-Format Converter
+# transimage - image format conversion
 
 ## Description
-`pil_image_converter` is a Python package and CLI tool for converting images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
+`transimage` is a Python package and CLI tool for converting images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
 
-Contributions always welcome!
+>> send your PR based god🙏🏻
 
 ## Features
 - Convert images between JPG, PNG, BMP, and WebP formats
@@ -22,48 +22,21 @@ To set up the development environment:
 1. Clone the repository
 2. Install PDM if you haven't already: `pip install pdm`
 3. Install dependencies: `pdm install`
-4. Convert images: `python main.py ./input_image.jpg ./output_image.png png`
+4. Convert images: `python src/____main____.py ./input_image.jpg ./output_image.png png`
 
-### Using `main.py` directly as a CLI tool (Recommended)
+### Using `____main____.py` directly as a CLI tool (Recommended)
 
-If you've cloned the repository or downloaded the source code, you can use the `main.py` file directly:
+Once you've cloned the repository or downloaded the source code, you can use the `__main__.py` file directly by using the following: `python __main__.py <input_path> <output_path> <output_format>`
 
-1. Navigate to the directory containing `main.py`
-2. Run the following command:
-
-`python main.py <input_path> <output_path> <output_format>`
-
-Example:
-
-`python main.py ./input_image.jpg ./output_image.png png`
-
-For batch conversion:
-
-`python main.py ./input_directory ./output_directory png`
-
-**Note:** You should use quotations for paths containing spaces.
--> Ex.: `python main.py "./input directory" "./output directory" jpg`
-
-
-### Using the pil_image_converter package
-
-You can use the pil_image_converter package directly from the command line:
-
-`python -m pil_image_converter <input_path> <output_path> <output_format>`
+**Input target may be a single file or directory.**
 
 - `<input_path>`: Path to the input image file or directory
 - `<output_path>`: Path to save the converted image(s)
 - `<output_format>`: Desired output format (jpg, png, bmp, or webp)
 
-Example:
+### Using the transimage package in your own projects
 
-`python -m pil_image_converter ./input_image.jpg ./output_image.png png`
-
-For batch conversion, provide a directory as the input path:
-
-`python -m pil_image_converter ./input_directory ./output_directory png`
-
-### Using pil_image_converter in your own projects
+You may test the transimage package is properly installed by running it directly from the command line: `python -m transimage <input_path> <output_path> <output_format>`
 
 1. First, ensure you're working within a virtual environment with PDM:
 
@@ -72,7 +45,7 @@ For batch conversion, provide a directory as the input path:
 2. In your Python script, import the necessary functions:
 
 ```python
-from pil_image_converter import collect_images, ImageConverter
+from transimage import collect_images, ImageConverter
 ```
 
 To convert a single image, use the ImageConverter class directly:
@@ -85,7 +58,7 @@ converter.convert()
 For batch conversion, you can pass in directories as arguments instead of individual image paths. Then, use the collect_images function and loop through the results:
 
 ```python
-from pil_image_converter import collect_images, ImageConverter
+from transimage import collect_images, ImageConverter
 
 input_directory = 'path/to/input/directory'
 output_directory = 'path/to/output/directory'
@@ -103,5 +76,15 @@ for input_path in image_files:
 ## License
 This project is licensed under the MIT License. See the LICENSE file for details.
 
+## Contributing 
+Like I said, send your PR. Based. God.
+
+### Set up
+1. Install the developer dependencies: `pdm install -G dev`
+2. Add your changes
+3. Test your code(`pdm run pytest tests/`)
+4. Iterate, repeat until finished.
+5. Run the `all` script to lint and format the code: `pdm run all`
+
 ## Version
-3.0.0
+1.0.0

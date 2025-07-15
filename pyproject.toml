@@ -1,7 +1,7 @@
 [project]
-name = "pil_image_converter"
-version = "3.0.3"
-description = "Converts images from one format to another using Pillow. Currently supports JPG, PNG, BMP, and WebP."
+name = "transimage"
+version = "1.0.0"
+description = "Converts images from one format to another using Pillow. Supports JPG, PNG, BMP, and WebP."
 authors = [
     {name = "Daethyra", email = "109057945+Daethyra@users.noreply.github.com"},
 ]
@@ -22,8 +22,16 @@ includes = []
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
+[tool.pdm.scripts]
+format = "black src/transimage tests"
+lint = "flake8 src/transimage tests"
+test = "pytest tests"
+all.composite = ["format", "lint", "test"]
+
 [dependency-groups]
 dev = [
     "black>=24.10.0",
     "flake8>=7.1.2",
+    "pdm>=2.25.4",
+    "pytest>=8.4.1",
 ]
