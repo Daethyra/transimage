@@ -76,6 +76,6 @@ if __name__ == "__main__":
         converted_files = process_images(
             args.input_path, args.output_path, args.output_format
         )
-        print(f"Successfully converted {len(converted_files)} images.")
+        print(f"\nSuccessfully operated {len(converted_files)} images.")
     except ValueError as e:
         print(f"Error: {str(e)}")
