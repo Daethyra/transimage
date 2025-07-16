@@ -87,4 +87,4 @@ Like I said, send your PR. Based. God.
 5. Run the `all` script to lint and format the code: `pdm run all`
 
 ## Version
-1.0.0
+1.0.1

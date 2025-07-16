@@ -9,13 +9,14 @@ from PIL import Image
 
 class ImageConverter:
     SUPPORTED_CONVERSIONS = {
-        ".jpg": {".jpg", ".png", ".bmp", ".webp"},
+        **{ext: {".jpg", ".png", ".bmp", ".webp"}
+           for ext in [".jpg", ".jpeg"]},
         ".png": {".jpg", ".png", ".bmp", ".webp"},
         ".bmp": {".jpg", ".png", ".bmp", ".webp"},
         ".webp": {".jpg", ".png", ".bmp", ".webp"},
     }
 
-    def __init__(self, input_path: str, output_path: str, output_format: str):
+    def __init__(self, input_path: str, output_path: str, output_format: str, jpg_quality=95):
         """
         Initializes a new instance of the ImageConverter class.
 
@@ -27,6 +28,7 @@ class ImageConverter:
         self.input_path = input_path
         self.output_path = output_path
         self.output_format = output_format.lower()
+        self.jpg_quality = jpg_quality
 
     def convert(self) -> None:
         """
@@ -50,7 +52,7 @@ class ImageConverter:
 
         if input_ext == output_ext:
             # If the input and output formats are the same, move the file instead of re-saving it
-            # self._move_or_error()
+            self._move_or_error()
             print(
                 f"Skipping conversion for {self.input_path} (already in {self.output_format} format)"
             )
@@ -77,7 +79,8 @@ class ImageConverter:
         rgb_img = img.convert("RGB")
 
         # Save as JPG with quality 95 (adjust as needed)
-        rgb_img.save(self.output_path, "JPEG", quality=95)
+        rgb_img.save(self.output_path, "JPEG", quality=self.jpg_quality)
+        print(f"Successfully converted {self.input_path} to jpg.")
 
     def _convert_image(self, input_ext: str, output_ext: str) -> None:
         """
@@ -85,6 +88,7 @@ class ImageConverter:
         """
         img = Image.open(self.input_path)
         img.save(self.output_path)
+        print(f"Successfully converted {self.input_path} to {self.output_path}.")
 
     def _move_or_error(self) -> None:
         """
@@ -92,6 +96,9 @@ class ImageConverter:
         """
         if self.input_path != self.output_path:
             os.replace(self.input_path, self.output_path)
+            print(
+                f"Moved {self.input_path} to {self.output_format}"
+            )
         else:
             raise ValueError(
                 f"Input and output paths are the same: {self.input_path}. Please provide a different output path."
@@ -107,7 +114,7 @@ class ImageConverter:
         """
         return (
             "Supported file formats and conversions:\n"
-            "JPEG: can be converted to JPEG, PNG, BMP, WebP\n"
+            "JPG/JPEG: can be converted to JPG, PNG, BMP, WebP\n"
             "PNG: can be converted to JPEG, PNG, BMP, WebP\n"
             "BMP: can be converted to JPEG, PNG, BMP, WebP\n"
             "WebP: can be converted to JPEG, PNG, BMP, WebP"
