@@ -16,7 +16,7 @@ class ImageConverter:
         ".webp": {".jpg", ".png", ".bmp", ".webp"},
     }
 
-    def __init__(self, input_path: str, output_path: str, output_format: str):
+    def __init__(self, input_path: str, output_path: str, output_format: str, jpg_quality=95):
         """
         Initializes a new instance of the ImageConverter class.
 
@@ -28,6 +28,7 @@ class ImageConverter:
         self.input_path = input_path
         self.output_path = output_path
         self.output_format = output_format.lower()
+        self.jpg_quality = jpg_quality
 
     def convert(self) -> None:
         """
@@ -78,7 +79,7 @@ class ImageConverter:
         rgb_img = img.convert("RGB")
 
         # Save as JPG with quality 95 (adjust as needed)
-        rgb_img.save(self.output_path, "JPEG", quality=95)
+        rgb_img.save(self.output_path, "JPEG", quality=self.jpg_quality)
 
     def _convert_image(self, input_ext: str, output_ext: str) -> None:
         """
