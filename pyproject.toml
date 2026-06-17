@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "transimage"
 version = "2.0.0"
-description = "CLI tool for converting images from one format to another using Pillow. Supports JPG, PNG, BMP, and WebP."
+description = "CLI tool for converting images between different formats and creating GIFs from image sequences, directories, or video files. Supports JPG, PNG, BMP, and WebP."
 authors = ["Daethyra <109057945+Daethyra@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"

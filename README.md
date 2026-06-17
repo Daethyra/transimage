@@ -1,75 +1,141 @@
-# transimage - image format conversion
+# transimage - image format conversion and GIF creation
 
 ## Description
-`transimage` is a Python package and CLI tool for converting images between different formats using the Pillow library. It supports conversions between JPG, PNG, BMP, and WebP formats.
+`transimage` is a Python package and CLI tool for converting images between different formats and creating GIFs from image sequences, directories, or video files. It uses Pillow for image operations and OpenCV for video frame extraction.
 
 >> send your PR based god🙏🏻
 
 ## Features
 - Convert images between JPG, PNG, BMP, and WebP formats
-- Batch conversion of multiple images
-- Simple command-line interface
+- Batch conversion of multiple images or entire directories
+- Create GIFs from a list of images, a directory of images, or a video file
+  - Configurable GIF parameters: FPS, size, crop, loop, and video trim
+  - Preserves aspect ratio on resize and handles transparency
+- Simple command-line interface with subcommands
 - Skips conversion if the input and output formats are the same
 
-## Usage
-
-#### Dependencies
+## Dependencies
 - Pillow >= 11.0.0
 - Poetry
 
-#### Setup
-To set up the development environment:
+Optional dependency for creating GIFs:
+- opencv-python-headless
+
+## Setup
+
+### Development Environment
 
 1. Clone the repository
-2. Install PDM if you haven't already: `pip install poetry` or `pipx install poetry`
-3. Install dependencies(including dev tools): `poetry install`
-4. Convert images: `poetry run python -m transimage ./input_image.jpg ./output_image.png png`
+2. Install Poetry: `pip install poetry` or `pipx install poetry`
+3. Install all dependencies: `poetry install`
+4. (Optional) For video support: `poetry install --extras opencv`
 
-### Using `transimage` directly as a CLI tool (Recommended)
+## Usage
 
-Once you've cloned the repository and run `poetry install`, the package is installed in the Poetry‑managed virtual environment. You can run it directly without activating anything: `poetry run python -m transimage <input_path> <output_path> <output_format>`
+All commands are run from the project root using Poetry’s virtual environment. Replace `poetry run python -m transimage` with `transimage` if you installed the package globally.
 
-**Input target may be a single file or directory.**
+### Image Conversion
 
-- `<input_path>`: Path to the input image file or directory
-- `<output_path>`: Path to save the converted image(s)
-- `<output_format>`: Desired output format (jpg, png, bmp, or webp)
+Convert a single image or all images in a directory:
 
-### Using the transimage package in your own projects
+    poetry run python -m transimage convert <input_path> <output_path> <output_format>
 
-To use the package programmatically, first ensure you're inside the project's virtual environment (via poetry shell or by prefixing commands with poetry run).
+- `<input_path>`: Path to a single image file or a directory of images
+- `<output_path>`: Directory where converted images will be saved (do not include file name)
+- `<output_format>`: Target format (jpg, png, bmp, webp)
 
-Then, import the necessary functions:
+#### Examples
 
-`from transimage import collect_images, ImageConverter`
+    poetry run python -m transimage convert ./photo.jpg ./output png
+    poetry run python -m transimage convert ./images/ ./converted webp
 
-To convert a single image, use the ImageConverter class directly:
+### GIF Creation
 
-```python
-converter = ImageConverter('path/to/input/image.jpg', 'path/to/output/image.png', 'png')
-converter.convert()
-```
+Create a GIF from images or video:
 
-#### Batch Conversions
+    poetry run python -m transimage gif <input> -o <output.gif> [options]
 
-For batch conversion, you can pass in directories as arguments instead of individual image paths. Then, use the collect_images function and loop through the results:
+- `<input>`: A directory path, a video file path, or a list of image file paths (list them after the command)
+- `-o, --output`: Output GIF file path (required)
 
-```python
-from transimage import collect_images, ImageConverter
-import os
+#### Options
 
-input_directory = 'path/to/input/directory'
-output_directory = 'path/to/output/directory'
-output_format = 'png'
+| Option           | Type   | Default | Description                                                  |
+|------------------|--------|---------|--------------------------------------------------------------|
+| `--fps`          | float  | 24      | Frames per second                                            |
+| `--size`         | int int| -       | Max width and height (aspect ratio preserved)                |
+| `--crop`         | int int int int | - | Crop box: left top right bottom                         |
+| `--loop`         | int    | 0       | Loop count (0 = infinite)                                    |
+| `--start-time`   | float  | -       | Start time in seconds (video only)                           |
+| `--end-time`     | float  | -       | End time in seconds (video only)                             |
+| `--skip-frames`  | int    | 1       | Only use every Nth frame (video only)                        |
 
-image_files = collect_images(input_directory)
+#### Examples
 
-for input_path in image_files:
-    filename = os.path.basename(input_path)
-    name, _ = os.path.splitext(filename)
-    output_path = os.path.join(output_directory, f"{name}.{output_format}")
-    convert_image(input_path, output_path, output_format)
-```
+From a directory of images (sorted by name):
+
+    poetry run python -m transimage gif ./frames -o movie.gif --fps 12 --size 640 480
+
+From a list of explicit image files:
+
+    poetry run python -m transimage gif a.jpg b.jpg c.jpg -o combined.gif --fps 2 --loop 0
+
+From a video file (requires the `opencv` extra):
+
+    poetry run python -m transimage gif video.mp4 -o clip.gif --fps 15 --start-time 2.5 --end-time 5 --size 320 240
+
+To preserve real-time speed from a video, adjust `--skip-frames` so that `fps / skip_frames` roughly equals the original video’s frame rate. For a 30 fps video, `--fps 18 --skip-frames 2` gives a natural-looking GIF.
+
+## Programmatic Usage
+
+Inside a script or interactive session, you can use the package directly after installing it in your environment.
+
+Import the needed functions:
+
+    from transimage import ImageConverter, convert_image, collect_images, GIFCreator, create_gif
+
+### Image Conversion
+
+    converter = ImageConverter('input.jpg', 'output.png', 'png')
+    converter.convert()
+
+Batch conversion:
+
+    import os
+    from transimage import collect_images, convert_image
+
+    input_dir = 'images/'
+    output_dir = 'converted/'
+    fmt = 'png'
+    for img_path in collect_images(input_dir):
+        name = os.path.splitext(os.path.basename(img_path))[0]
+        out_path = os.path.join(output_dir, f"{name}.{fmt}")
+        convert_image(img_path, out_path, fmt)
+
+### GIF Creation
+
+Using the convenience function:
+
+    create_gif(
+        input=['a.jpg', 'b.jpg', 'c.jpg'],   # or a directory path, or a video file path
+        output='animation.gif',
+        fps=10,
+        size=(320, 240),
+        loop=0
+    )
+
+Or with the class for more control:
+
+    creator = GIFCreator(
+        sources='video.mp4',
+        output_path='clip.gif',
+        fps=15,
+        size=(480, 360),
+        start_time=2.0,
+        end_time=5.0,
+        skip_frames=2
+    )
+    creator.create()
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file for details.
