@@ -15,18 +15,19 @@
 
 #### Dependencies
 - Pillow >= 11.0.0
+- Poetry
 
 #### Setup
 To set up the development environment:
 
 1. Clone the repository
-2. Install PDM if you haven't already: `pip install pdm`
-3. Install dependencies: `pdm install`
-4. Convert images: `python src/____main____.py ./input_image.jpg ./output_image.png png`
+2. Install PDM if you haven't already: `pip install poetry` or `pipx install poetry`
+3. Install dependencies(including dev tools): `poetry install`
+4. Convert images: `poetry run python -m transimage ./input_image.jpg ./output_image.png png`
 
-### Using `____main____.py` directly as a CLI tool (Recommended)
+### Using `transimage` directly as a CLI tool (Recommended)
 
-Once you've cloned the repository or downloaded the source code, you can use the `__main__.py` file directly by using the following: `python __main__.py <input_path> <output_path> <output_format>`
+Once you've cloned the repository and run `poetry install`, the package is installed in the Poetry‑managed virtual environment. You can run it directly without activating anything: `poetry run python -m transimage <input_path> <output_path> <output_format>`
 
 **Input target may be a single file or directory.**
 
@@ -36,17 +37,11 @@ Once you've cloned the repository or downloaded the source code, you can use the
 
 ### Using the transimage package in your own projects
 
-You may test the transimage package is properly installed by running it directly from the command line: `python -m transimage <input_path> <output_path> <output_format>`
+To use the package programmatically, first ensure you're inside the project's virtual environment (via poetry shell or by prefixing commands with poetry run).
 
-1. First, ensure you're working within a virtual environment with PDM:
+Then, import the necessary functions:
 
-   `pdm install`
-
-2. In your Python script, import the necessary functions:
-
-```python
-from transimage import collect_images, ImageConverter
-```
+`from transimage import collect_images, ImageConverter`
 
 To convert a single image, use the ImageConverter class directly:
 
@@ -55,10 +50,13 @@ converter = ImageConverter('path/to/input/image.jpg', 'path/to/output/image.png'
 converter.convert()
 ```
 
+#### Batch Conversions
+
 For batch conversion, you can pass in directories as arguments instead of individual image paths. Then, use the collect_images function and loop through the results:
 
 ```python
 from transimage import collect_images, ImageConverter
+import os
 
 input_directory = 'path/to/input/directory'
 output_directory = 'path/to/output/directory'
@@ -77,14 +75,17 @@ for input_path in image_files:
 This project is licensed under the MIT License. See the LICENSE file for details.
 
 ## Contributing 
-Like I said, send your PR. Based. God.
+Please submit issues regarding any oversight you see. Pull requests for improvements are welcome.
 
 ### Set up
-1. Install the developer dependencies: `pdm install -G dev`
+1. Install the developer dependencies: poetry install (dev deps are included by default)
 2. Add your changes
-3. Test your code(`pdm run pytest tests/`)
-4. Iterate, repeat until finished.
-5. Run the `all` script to lint and format the code: `pdm run all`
+3. Test your code: poetry run pytest tests/
+4. Format and lint:
+   - Format: poetry run black src/transimage tests
+   - Lint: poetry run flake8 src/transimage tests
+   - Run all together: poetry run black src/transimage tests && poetry run flake8 src/transimage tests && poetry run pytest tests
+5. Rise and repeat until finished.
 
 ## Version
-1.0.1
+2.0.0
