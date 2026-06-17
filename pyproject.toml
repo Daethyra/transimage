@@ -1,37 +1,27 @@
-[project]
+[tool.poetry]
 name = "transimage"
-version = "1.0.1"
-description = "CLI tool for converting images from one format to another using Pillow. Supports JPG, PNG, BMP, and WebP."
-authors = [
-    {name = "Daethyra", email = "109057945+Daethyra@users.noreply.github.com"},
-]
-dependencies = [
-    "pillow<12.0.0,>=11.0.0",
-]
-requires-python = "<4.0,>=3.13"
+version = "2.0.0"
+description = "CLI tool for converting images between different formats and creating GIFs from image sequences, directories, or video files. Supports JPG, PNG, BMP, and WebP."
+authors = ["Daethyra <109057945+Daethyra@users.noreply.github.com>"]
+license = "MIT"
 readme = "README.md"
-license = {text = "MIT"}
+packages = [{ include = "transimage", from = "src" }]
 
-[tool.pdm]
-distribution = true
-package-dir = "src"
+[tool.poetry.dependencies]
+python = ">=3.13,<4.0"
+pillow = ">=11.0.0,<12.0.0"
 
-[tool.pdm.build]
-includes = []
+[tool.poetry.group.dev.dependencies]
+black = ">=24.10.0"
+flake8 = ">=7.1.2"
+pytest = ">=8.4.1"
+
+[tool.poetry.extras]
+opencv = ["opencv-python-headless"]
+
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.pdm.scripts]
-format = "black src/transimage tests"
-lint = "flake8 src/transimage tests"
-test = "pytest tests"
-all.composite = ["format", "lint", "test"]
-
-[dependency-groups]
-dev = [
-    "black>=24.10.0",
-    "flake8>=7.1.2",
-    "pdm>=2.25.4",
-    "pytest>=8.4.1",
-]
+[tool.poetry.scripts]
+transimage = "transimage.__main__:main"

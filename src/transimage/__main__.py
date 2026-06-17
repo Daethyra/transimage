@@ -1,5 +1,5 @@
 """
-Main module for image conversion. Handles both single image and directory processing.
+Main entry point for transimage: image conversion and GIF creation.
 """
 
 import argparse
@@ -8,22 +8,12 @@ from typing import List
 
 from transimage.image_collector import collect_images
 from transimage.image_converter import convert_image
+from transimage.gif_creator import create_gif
 
 
 def process_images(input_path: str, output_path: str, output_format: str) -> List[str]:
     """
     Process images based on whether the input path is a single image or a directory.
-
-    Args:
-        input_path (str): Path to the input image file or directory.
-        output_path (str): Path to save the converted image file or directory.
-        output_format (str): Desired output format (e.g., 'jpg', 'png', 'bmp', 'webp').
-
-    Returns:
-        List[str]: A list of paths to the converted images.
-
-    Raises:
-        ValueError: If the input path does not exist.
     """
     if not os.path.exists(input_path):
         raise ValueError(f"Input path does not exist: {input_path}")
@@ -59,23 +49,73 @@ def process_images(input_path: str, output_path: str, output_format: str) -> Lis
     return converted_images
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Convert images to a specified format."
-    )
-    parser.add_argument("input_path", help="Path to input image or directory")
-    parser.add_argument(
-        "output_path", help="Path to output directory. Do not include file name."
-    )
-    parser.add_argument(
-        "output_format", help="Desired output format (jpg, png, bmp, webp)"
-    )
-    args = parser.parse_args()
+def main() -> None:
+    """Entry point for the transimage command-line tool."""
+    parser = argparse.ArgumentParser(description="TransImage: convert images or create GIFs")
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
-    try:
-        converted_files = process_images(
-            args.input_path, args.output_path, args.output_format
-        )
-        print(f"\nSuccessfully operated {len(converted_files)} images.")
-    except ValueError as e:
-        print(f"Error: {str(e)}")
+    # ---------- convert subcommand ----------
+    convert_parser = subparsers.add_parser("convert", help="Convert image formats")
+    convert_parser.add_argument("input_path", help="Input image or directory")
+    convert_parser.add_argument("output_path", help="Output directory (not a file name)")
+    convert_parser.add_argument("output_format", help="Target format (jpg, png, bmp, webp)")
+
+    # ---------- gif subcommand ----------
+    gif_parser = subparsers.add_parser("gif", help="Create a GIF from images or video")
+    gif_parser.add_argument(
+        "input",
+        help="Input: directory, video file, or multiple image paths (list them after the command)",
+    )
+    gif_parser.add_argument("-o", "--output", required=True, help="Output GIF file path")
+    gif_parser.add_argument("--fps", type=float, default=24, help="Frames per second (default: 10)")
+    gif_parser.add_argument(
+        "--size", nargs=2, type=int, metavar=("WIDTH", "HEIGHT"),
+        help="Resize frames to fit inside WIDTHxHEIGHT (aspect ratio kept)"
+    )
+    gif_parser.add_argument(
+        "--crop", nargs=4, type=int, metavar=("L", "T", "R", "B"),
+        help="Crop box: left top right bottom"
+    )
+    gif_parser.add_argument("--loop", type=int, default=0, help="Loop count (0 = infinite)")
+    gif_parser.add_argument("--start-time", type=float, default=None, help="Start time in seconds (video only)")
+    gif_parser.add_argument("--end-time", type=float, default=None, help="End time in seconds (video only)")
+    gif_parser.add_argument("--skip-frames", type=int, default=1, help="Take every Nth frame (video only)")
+
+    # parse_known_args allows extra positional arguments (image files) to be collected
+    args, unknown = parser.parse_known_args()
+
+    if args.command == "convert":
+        try:
+            converted_files = process_images(args.input_path, args.output_path, args.output_format)
+            print(f"\nSuccessfully operated {len(converted_files)} images.")
+        except ValueError as e:
+            print(f"Error: {str(e)}")
+
+    elif args.command == "gif":
+        # Determine input source
+        if unknown:
+            # user passed extra file names -> list of images
+            input_src = [args.input] + unknown
+        else:
+            # single argument: could be directory or video
+            input_src = args.input
+
+        try:
+            create_gif(
+                input=input_src,
+                output=args.output,
+                fps=args.fps,
+                size=tuple(args.size) if args.size else None,
+                crop=tuple(args.crop) if args.crop else None,
+                loop=args.loop,
+                start_time=args.start_time,
+                end_time=args.end_time,
+                skip_frames=args.skip_frames,
+            )
+            print("GIF created successfully.")
+        except Exception as e:
+            print(f"Error: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
