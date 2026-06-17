@@ -97,7 +97,7 @@ class ImageConverter:
         if self.input_path != self.output_path:
             os.replace(self.input_path, self.output_path)
             print(
-                f"Moved {self.input_path} to {self.output_format}"
+                f"Moved {self.input_path} to {self.output_path}"
             )
         else:
             raise ValueError(
