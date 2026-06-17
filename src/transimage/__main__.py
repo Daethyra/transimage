@@ -14,8 +14,6 @@ from transimage.gif_creator import create_gif
 def process_images(input_path: str, output_path: str, output_format: str) -> List[str]:
     """
     Process images based on whether the input path is a single image or a directory.
-
-    (existing code from your original __main__.py – kept unchanged)
     """
     if not os.path.exists(input_path):
         raise ValueError(f"Input path does not exist: {input_path}")
@@ -51,7 +49,8 @@ def process_images(input_path: str, output_path: str, output_format: str) -> Lis
     return converted_images
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point for the transimage command-line tool."""
     parser = argparse.ArgumentParser(description="TransImage: convert images or create GIFs")
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
@@ -116,3 +115,7 @@ if __name__ == "__main__":
             print("GIF created successfully.")
         except Exception as e:
             print(f"Error: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
