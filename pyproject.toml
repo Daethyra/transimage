@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "transimage"
-version = "2.0.0"
+version = "2.0.1"
 description = "CLI tool for converting images between different formats and creating GIFs from image sequences, directories, or video files. Supports JPG, PNG, BMP, and WebP."
 authors = ["Daethyra <109057945+Daethyra@users.noreply.github.com>"]
 license = "MIT"
@@ -9,7 +9,7 @@ packages = [{ include = "transimage", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.13,<4.0"
-pillow = ">=11.0.0,<12.0.0"
+pillow = ">=12.2.0,<13.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=24.10.0"
