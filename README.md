@@ -26,9 +26,9 @@ Optional dependency for creating GIFs:
 ### Development Environment
 
 1. Clone the repository
-2. Install Poetry: `pip install poetry` or `pipx install poetry`
+2. Install Poetry: `pip install poetry`
 3. Install all dependencies: `poetry install`
-4. (Optional) For video support: `poetry install --extras opencv`
+4. (Optional) For video -> GIF support: `poetry install --extras opencv`
 
 ## Usage
 
@@ -70,6 +70,25 @@ Create a GIF from images or video:
 | `--end-time`     | float  | -       | End time in seconds (video only)                             |
 | `--skip-frames`  | int    | 1       | Only use every Nth frame (video only)                        |
 
+#### Understanding `--skip-frames` and frame rate
+
+`--skip-frames` can help lower output file size, but there's more to it than that. It controls how motion translates from video to GIF.
+
+To produce a GIF that preserves the input's original speed, use the formula: `target_fps = video_fps / skip_frames`
+
+This should make it look like a real-time playback.
+
+The following table applies the formula to a 30 FPS video:
+| `--fps` (real‑time) | `--skip-frames` | Effect                        |
+|----------------|-------------------|----------------------------------|
+| 30              | 1                | smooth "real-time" playback      |
+| 15              | 2                | every 2nd frame, natural motion  |
+| 10              | 3                | arguably fluid                   |
+| 2.5             | 1                | slow motion                      |
+
+**Eliminate near‑duplicates**  
+Screen recordings and static scenes often have consecutive identical frames. Skipping a few frames (`--skip-frames 2` or `3`) removes those stills, making the GIF appear more responsive.
+
 #### Examples
 
 From a directory of images (sorted by name):
@@ -83,8 +102,6 @@ From a list of explicit image files:
 From a video file (requires the `opencv` extra):
 
     poetry run python -m transimage gif video.mp4 -o clip.gif --fps 15 --start-time 2.5 --end-time 5 --size 320 240
-
-To preserve real-time speed from a video, adjust `--skip-frames` so that `fps / skip_frames` roughly equals the original video’s frame rate. For a 30 fps video, `--fps 18 --skip-frames 2` gives a natural-looking GIF.
 
 ## Programmatic Usage
 
@@ -101,41 +118,47 @@ Import the needed functions:
 
 Batch conversion:
 
-    import os
-    from transimage import collect_images, convert_image
+```python
+import os
+from transimage import collect_images, convert_image
 
-    input_dir = 'images/'
-    output_dir = 'converted/'
-    fmt = 'png'
-    for img_path in collect_images(input_dir):
-        name = os.path.splitext(os.path.basename(img_path))[0]
-        out_path = os.path.join(output_dir, f"{name}.{fmt}")
-        convert_image(img_path, out_path, fmt)
+input_dir = 'images/'
+output_dir = 'converted/'
+fmt = 'png'
+for img_path in collect_images(input_dir):
+    name = os.path.splitext(os.path.basename(img_path))[0]
+    out_path = os.path.join(output_dir, f"{name}.{fmt}")
+    convert_image(img_path, out_path, fmt)
+```
 
 ### GIF Creation
 
 Using the convenience function:
 
-    create_gif(
-        input=['a.jpg', 'b.jpg', 'c.jpg'],   # or a directory path, or a video file path
-        output='animation.gif',
-        fps=10,
-        size=(320, 240),
-        loop=0
-    )
+```python
+create_gif(
+    input=['a.jpg', 'b.jpg', 'c.jpg'],   # or a directory path, or a video file path
+    output='animation.gif',
+    fps=10,
+    size=(320, 240),
+    loop=0
+)
+```
 
 Or with the class for more control:
 
-    creator = GIFCreator(
-        sources='video.mp4',
-        output_path='clip.gif',
-        fps=15,
-        size=(480, 360),
-        start_time=2.0,
-        end_time=5.0,
-        skip_frames=2
-    )
-    creator.create()
+```python
+creator = GIFCreator(
+    sources='video.mp4',
+    output_path='clip.gif',
+    fps=15,
+    size=(480, 360),
+    start_time=2.0,
+    end_time=5.0,
+    skip_frames=2
+)
+creator.create()
+```
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file for details.
@@ -153,5 +176,10 @@ Please submit issues regarding any oversight you see. Pull requests for improvem
    - Run all together: poetry run black src/transimage tests && poetry run flake8 src/transimage tests && poetry run pytest tests
 5. Rise and repeat until finished.
 
-## Version
-2.0.0
+## Changelog
+
+### 2.0.1 (20-06-2026)
+- Clarified README
+    - provided a more thorough explanation of how `--fps` and `--skip-frames` affect GIF output
+    - changed indented code examples to true code blocks
+    - clarified why `opencv` is optional in Development Environment section
