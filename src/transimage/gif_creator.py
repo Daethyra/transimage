@@ -3,7 +3,6 @@ Module for creating GIFs from images, image directories, or video files.
 """
 
 import os
-from pathlib import Path
 from typing import List, Optional, Union, Tuple
 
 from PIL import Image
@@ -25,7 +24,13 @@ class GIFCreator:
         skip_frames: int = 1,                            # for video: take every Nth frame
         start_time: Optional[float] = None,              # seconds, video only
         end_time: Optional[float] = None,                # seconds, video only
+        colors: int = 256,                               # control maximum bitmap depth
+        dither: bool = True,                             # whether to dither. kinda sounds like a dance move
     ):
+        if not 2 <= colors <= 256:
+            raise ValueError(
+                f"colors must be between 2 and 256, got {colors}"
+            )
         self.sources = sources
         self.output_path = output_path
         self.fps = fps
@@ -37,6 +42,8 @@ class GIFCreator:
         self.skip_frames = skip_frames
         self.start_time = start_time
         self.end_time = end_time
+        self.colors = colors
+        self.dither = dither
 
     def _load_images_from_video(self, video_path: str) -> List[Image.Image]:
         """Extract frames from a video file using OpenCV."""
@@ -102,6 +109,23 @@ class GIFCreator:
                 img = img.convert("RGB")
             processed.append(img)
         return processed
+    
+    def _quantize_frames(self, frames: List[Image.Image]) -> List[Image.Image]:
+        """Reduce each frame to the selected palette using the configured dither setting."""
+        if self.colors >= 256:
+            return frames
+
+        quantized = []
+        dither_method = Image.Dither.FLOYDSTEINBERG if self.dither else Image.Dither.NONE
+        for img in frames:
+            # quantize() returns a new image, converts to 'P' mode with the given palette
+            q = img.quantize(
+                colors=self.colors,
+                method=Image.MEDIANCUT,      # median cut is fast and effective
+                dither=dither_method,
+            )
+            quantized.append(q)
+        return quantized
 
     def create(self) -> None:
         """Generate the GIF and save it."""
@@ -134,6 +158,9 @@ class GIFCreator:
 
         # 2. Process all frames (resize, crop, convert to RGB)
         frames = self._process_frames(images)
+        
+        # Quantize frames if color limit is set
+        frames = self._quantize_frames(frames)
 
         # 3. Save as GIF
         frames[0].save(
@@ -157,6 +184,8 @@ def create_gif(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     skip_frames: int = 1,
+    colors: int = 256,
+    dither: bool = True,
 ) -> None:
     """
     Convenience function to create a GIF with default parameters.
@@ -171,6 +200,8 @@ def create_gif(
         start_time: Start time in seconds (video only).
         end_time: End time in seconds (video only).
         skip_frames: Only use every Nth frame (video only).
+        colors: Maximum number of colors in the GIF palette (2‑256, default 256).
+        dither: Whether to apply dithering (True for Floyd‑Steinberg(default), False to disable).
     """
     creator = GIFCreator(
         sources=input,
@@ -182,5 +213,7 @@ def create_gif(
         start_time=start_time,
         end_time=end_time,
         skip_frames=skip_frames,
+        colors=colors,
+        dither=dither,
     )
     creator.create()

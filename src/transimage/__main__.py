@@ -67,7 +67,7 @@ def main() -> None:
         help="Input: directory, video file, or multiple image paths (list them after the command)",
     )
     gif_parser.add_argument("-o", "--output", required=True, help="Output GIF file path")
-    gif_parser.add_argument("--fps", type=float, default=24, help="Frames per second (default: 10)")
+    gif_parser.add_argument("--fps", type=float, default=24, help="Frames per second (default: 24)")
     gif_parser.add_argument(
         "--size", nargs=2, type=int, metavar=("WIDTH", "HEIGHT"),
         help="Resize frames to fit inside WIDTHxHEIGHT (aspect ratio kept)"
@@ -80,6 +80,8 @@ def main() -> None:
     gif_parser.add_argument("--start-time", type=float, default=None, help="Start time in seconds (video only)")
     gif_parser.add_argument("--end-time", type=float, default=None, help="End time in seconds (video only)")
     gif_parser.add_argument("--skip-frames", type=int, default=1, help="Take every Nth frame (video only)")
+    gif_parser.add_argument("--colors", type=int, default=256, help="Maximum number of colors in the GIF palette (default: 256)")
+    gif_parser.add_argument("--no-dither", action="store_true", default=False, help="Disable dithering to possibly increase compression at the cost of banding (default: dithering enabled)")
 
     # parse_known_args allows extra positional arguments (image files) to be collected
     args, unknown = parser.parse_known_args()
@@ -111,6 +113,8 @@ def main() -> None:
                 start_time=args.start_time,
                 end_time=args.end_time,
                 skip_frames=args.skip_frames,
+                colors=args.colors,
+                dither=not args.no_dither,
             )
             print("GIF created successfully.")
         except Exception as e:
