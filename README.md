@@ -69,6 +69,8 @@ Create a GIF from images or video:
 | `--start-time`   | float  | -       | Start time in seconds (video only)                           |
 | `--end-time`     | float  | -       | End time in seconds (video only)                             |
 | `--skip-frames`  | int    | 1       | Only use every Nth frame (video only)                        |
+| `--colors`       | int    | 256     | Maximum number of colors in the GIF palette (256 = full 8‑bit) |
+| `--no-dither`    | flag   | False   | Disable dithering; may create sharper edges in solid areas but can cause banding |
 
 #### Understanding `--skip-frames` and frame rate
 
@@ -102,6 +104,10 @@ From a list of explicit image files:
 From a video file (requires the `opencv` extra):
 
     poetry run python -m transimage gif video.mp4 -o clip.gif --fps 15 --start-time 2.5 --end-time 5 --size 320 240
+
+Reduce palette to 64 colors and turn off dithering for a crisp, retro look
+
+    poetry run python -m transimage gif ./frames -o movie.gif --fps 12 --colors 64 --no-dither
 
 ## Programmatic Usage
 
@@ -177,6 +183,9 @@ Please submit issues regarding any oversight you see. Pull requests for improvem
 5. Rise and repeat until finished.
 
 ## Changelog
+
+### 2.1.0 (24-06-2026)
+- Added `--colors` and `--no-dither` arguments to give the user more control over a GIF's output file size.
 
 ### 2.0.1 (20-06-2026)
 - Clarified README
