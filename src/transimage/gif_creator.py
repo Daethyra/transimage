@@ -51,9 +51,7 @@ class GIFCreator:
             import cv2
         except ImportError:
             raise ImportError(
-                "To process video files, install the optional 'video' extra:\n"
-                "  pip install transimage[video]\n"
-                "  or poetry install --extras video"
+                "To process video files, install opencv-python-headless"
             )
 
         cap = cv2.VideoCapture(video_path)
