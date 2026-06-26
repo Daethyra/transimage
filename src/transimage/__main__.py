@@ -74,7 +74,7 @@ def main() -> None:
     )
     gif_parser.add_argument(
         "--crop", nargs=4, type=int, metavar=("L", "T", "R", "B"),
-        help="Crop box: left top right bottom"
+        help="Pixels to cut from each side: left top right bottom (e.g. --crop 0 20 0 20 removes 20px from top and bottom)"
     )
     gif_parser.add_argument("--loop", type=int, default=0, help="Loop count (0 = infinite)")
     gif_parser.add_argument("--start-time", type=float, default=None, help="Start time in seconds (video only)")

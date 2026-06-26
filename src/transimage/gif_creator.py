@@ -93,9 +93,20 @@ class GIFCreator:
             if self.size:
                 img = img.copy()
                 img.thumbnail(self.size, self.resize_method)
-            # Crop if a box is given
+            # crop (cut amounts from each edge)
             if self.crop:
-                img = img.crop(self.crop)
+                left_cut, top_cut, right_cut, bottom_cut = self.crop
+                w, h = img.size
+                left = left_cut
+                top = top_cut
+                right = w - right_cut
+                bottom = h - bottom_cut
+                # Clamp to valid range (prevent zero/negative dimensions)
+                left = max(0, min(left, w))
+                top = max(0, min(top, h))
+                right = max(left, min(right, w))
+                bottom = max(top, min(bottom, h))
+                img = img.crop((left, top, right, bottom))
             # Ensure image is in RGB mode (GIF doesn't store alpha like PNG)
             if img.mode in ("RGBA", "LA", "P"):
                 background = Image.new("RGB", img.size, (255, 255, 255))
