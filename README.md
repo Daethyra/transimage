@@ -64,7 +64,7 @@ Create a GIF from images or video:
 |------------------|--------|---------|--------------------------------------------------------------|
 | `--fps`          | float  | 24      | Frames per second                                            |
 | `--size`         | int int| -       | Max width and height (aspect ratio preserved)                |
-| `--crop`         | int int int int | - | Crop box: left top right bottom                         |
+| `--crop`         | int int int int | -       | Pixels to cut from each edge: left top right bottom. e.g. 0 20 0 20 trims 20px from top & bottom |
 | `--loop`         | int    | 0       | Loop count (0 = infinite)                                    |
 | `--start-time`   | float  | -       | Start time in seconds (video only)                           |
 | `--end-time`     | float  | -       | End time in seconds (video only)                             |
@@ -108,6 +108,10 @@ From a video file (requires the `opencv` extra):
 Reduce palette to 64 colors and turn off dithering for a crisp, retro look
 
     poetry run python -m transimage gif ./frames -o movie.gif --fps 12 --colors 64 --no-dither
+
+Remove 20px from top and bottom, resize to fit 640x480
+    
+    poetry run python -m transimage gif ./frames -o movie.gif --fps 12 --size 640 480 --crop 0 20 0 20
 
 ## Programmatic Usage
 
@@ -183,6 +187,9 @@ Please submit issues regarding any oversight you see. Pull requests for improvem
 5. Rise and repeat until finished.
 
 ## Changelog
+
+### 3.0.0 (25-06-2026)
+- Revamped `--crop` to be more intuitive. Crop now takes the number of pixels to cut off, instead of requiring the user to provide the exact measurements of 
 
 ### 2.1.0 (24-06-2026)
 - Added `--colors` and `--no-dither` arguments to give the user more control over a GIF's output file size.
