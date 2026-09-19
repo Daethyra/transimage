@@ -1,7 +1,7 @@
 # transimage - image format conversion and GIF creation
 
 ## Description
-`transimage` is a Python package and CLI tool for converting images between different formats and creating GIFs from image sequences, directories, or video files. It uses Pillow for image operations and OpenCV for video frame extraction.
+`transimage` is a program for converting images between different formats and creating GIFs from image sequences, directories, or video files. It uses Pillow for image operations and OpenCV for video frame extraction. It includes a Python package, CLI tool and GUI.
 
 >> send your PR based god🙏🏻
 
@@ -187,6 +187,10 @@ Please submit issues regarding any oversight you see. Pull requests for improvem
 5. Rise and repeat until finished.
 
 ## Changelog
+
+### 3.1.0 (17-09-2026)
+- Added a Qt GUI for the program and packaged it into an `.exe` via Pyinstaller that includes all the same functionality
+- Added per-session settings persistence with a reset-on-startup option
 
 ### 3.0.0 (25-06-2026)
 - Revamped `--crop` to be more intuitive. Crop now takes the number of pixels to cut off, instead of requiring the user to provide the exact measurements of 
