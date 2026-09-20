@@ -910,6 +910,21 @@ class ImageConversionTab(QWidget):
         if out and os.path.isdir(out):
             self._output_path_edit.setText(out)
 
+    def reset_options(self):
+        """Reset every option on this tab to its factory default."""
+        idx = self._format_combo.findText("png")
+        if idx >= 0:
+            self._format_combo.setCurrentIndex(idx)
+
+        self._quality_spin.setValue(95)
+        self._keep_original_check.setChecked(True)
+        self._output_path_edit.clear()
+        self._input_path_edit.clear()
+        self._file_list.clear()
+        self._preview.clear()
+        self._progress_bar.setValue(0)
+        self._progress_label.setText("Ready")
+
 
 class GIFCreationTab(QWidget):
     """Tab for GIF creation from image files or from a video."""
@@ -1379,6 +1394,31 @@ class GIFCreationTab(QWidget):
         self._source_height = 0
         self._reset_size_presets()
         self._update_fps_hint()
+
+    def _sync_input_type_visibility(self):
+        """Update widget visibility to match the currently checked input-type
+        radio button, without clearing session state.
+
+        `QButtonGroup.buttonClicked` is only emitted by user interaction, so
+        programmatically calling `setChecked()` (as reset_options does) needs
+        a manual visibility update.  Unlike `_on_input_type_changed`, this
+        method leaves the loaded video / added files intact.
+        """
+        is_video_mode = self._from_video_radio.isChecked()
+
+        self._files_list.setVisible(not is_video_mode)
+        self._add_files_btn.setVisible(not is_video_mode)
+        self._clear_files_btn.setVisible(not is_video_mode)
+        self._remove_file_btn.setVisible(not is_video_mode)
+        self._browse_input_btn.setVisible(is_video_mode)
+        self._video_settings_group.setVisible(is_video_mode)
+
+        if is_video_mode:
+            self._input_path_edit.setPlaceholderText("Select video file...")
+        else:
+            self._input_path_edit.setPlaceholderText(
+                "Optional base path - use 'Add Files' button to add images..."
+            )
 
     def _browse_input(self):
         # Only reachable in video mode.
@@ -1903,6 +1943,51 @@ class GIFCreationTab(QWidget):
         self._progress_label.setText("Error occurred")
         QMessageBox.critical(self, "GIF Creation Error", message)
 
+    # -- Reset
+
+    def reset_options(self):
+        """Reset every option on this tab to its factory default.
+
+        Session state (loaded video, added files, output path) is preserved
+        so that hitting the button does not blow away the user's working set.
+        """
+        # Input type -> From Video.  Because this is a programmatic change,
+        # the button-group signal is not emitted, so we sync the widget
+        # visibility ourselves.
+        self._from_video_radio.setChecked(True)
+        self._sync_input_type_visibility()
+
+        # GIF settings
+        self._fps_spin.setValue(10.0)
+        self._loop_spin.setValue(0)
+        self._colors_spin.setValue(256)
+        self._dither_check.setChecked(True)
+
+        # Size mode -> Preset, and clear any custom W/H.
+        self._size_preset_radio.setChecked(True)
+        self._on_size_mode_changed(self._size_preset_radio)
+        self._width_spin.setValue(0)
+        self._height_spin.setValue(0)
+        if self._size_preset_combo.count() > 0:
+            self._size_preset_combo.setCurrentIndex(0)
+
+        # Crop -> all zeros, overlay off
+        self._crop_overlay_check.setChecked(False)
+        self._crop_left.setValue(0)
+        self._crop_top.setValue(0)
+        self._crop_right.setValue(0)
+        self._crop_bottom.setValue(0)
+
+        # Video settings
+        self._start_time_spin.setValue(0)
+        self._end_time_spin.setValue(0)
+        self._skip_frames_spin.setValue(1)
+
+        # Clear the "video native fps" hint if it was showing.
+        self._detected_fps_hint.setVisible(False)
+
+    # -- Persistence
+
     def save_settings(self, settings: QSettings):
         settings.setValue("gif_input_type", self._input_type_group.checkedId())
         settings.setValue("gif_fps", self._fps_spin.value())
@@ -2118,6 +2203,15 @@ class HelpDialog(QDialog):
             overwrite this by typing your own path or clicking
             <b>Browse...</b>.</p>
 
+            <h2>Reset Options</h2>
+            <p>The <b>Reset Options</b> button in the top-right corner
+            of the tab bar restores every option on both tabs to its
+            factory default. Session state that you have already set up
+            (source video, added image files, output paths) is preserved,
+            so you can reset the options without losing your working set.
+            Use <b>File &gt; New</b> (Ctrl+N) if you also want to clear
+            the session state.</p>
+
             <h2>Tips &amp; Shortcuts</h2>
             <ul>
                 <li><b>Drag and drop</b> a file or folder onto the
@@ -2261,14 +2355,46 @@ class TransImageWindow(QMainWindow):
         self._conversion_tab = ImageConversionTab()
         self._gif_tab = GIFCreationTab()
 
-        self._tabs.addTab(self._conversion_tab, "Image Conversion")
+        # GIF Creation is placed first, followed by Image Conversion.
         self._tabs.addTab(self._gif_tab, "GIF Creation")
+        self._tabs.addTab(self._conversion_tab, "Image Conversion")
 
-        self._tabs.setTabIcon(0, QIcon.fromTheme("image-x-generic"))
-        self._tabs.setTabIcon(1, QIcon.fromTheme("video-x-generic"))
+        self._tabs.setTabIcon(0, QIcon.fromTheme("video-x-generic"))
+        self._tabs.setTabIcon(1, QIcon.fromTheme("image-x-generic"))
 
         # GIF Creation is the tab that opens by default.
-        self._tabs.setCurrentIndex(1)
+        self._tabs.setCurrentIndex(0)
+
+        # --- "Reset Options" button in the top-right corner of the tab bar ---
+        self._reset_options_btn = QPushButton("Reset Options")
+        self._reset_options_btn.setToolTip(
+            "Restore every option on both tabs to its factory default.\n"
+            "Session state (input/output paths, loaded video, added files) "
+            "is preserved."
+        )
+        # The corner widget lives inside the tab bar, which is much shorter
+        # than a normal button; give it an explicit size so it can be hit.
+        self._reset_options_btn.setMinimumHeight(24)
+        self._reset_options_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # A small right-side margin so the button isn't flush with the
+        # window border.
+        self._reset_options_btn.setStyleSheet(
+            "QPushButton { padding: 2px 10px; margin-right: 6px; }"
+        )
+
+        # Important: the lambda ignores the `checked` bool that `clicked`
+        # carries, so the connection cannot silently fail on a signature
+        # mismatch.  Using the button directly (no wrapper QWidget) also
+        # avoids ownership issues when the corner widget is reparented by
+        # QTabWidget.
+        self._reset_options_btn.clicked.connect(
+            lambda *_: self._on_reset_options_clicked()
+        )
+
+        self._tabs.setCornerWidget(
+            self._reset_options_btn, Qt.Corner.TopRightCorner
+        )
+        self._reset_options_btn.show()
 
         self.setCentralWidget(self._tabs)
 
@@ -2543,6 +2669,13 @@ class TransImageWindow(QMainWindow):
         # --- Edit menu ---
         edit_menu = menubar.addMenu("&Edit")
 
+        reset_action = QAction("&Reset Options", self)
+        reset_action.setShortcut("Ctrl+R")
+        reset_action.triggered.connect(self._reset_options)
+        edit_menu.addAction(reset_action)
+
+        edit_menu.addSeparator()
+
         settings_action = QAction("&Settings...", self)
         settings_action.setShortcut("Ctrl+,")
         settings_action.triggered.connect(self._show_settings)
@@ -2647,6 +2780,18 @@ class TransImageWindow(QMainWindow):
         self._gif_tab._progress_label.setText("Ready")
 
         self._status_label.setText("New session started")
+
+    @Slot()
+    def _reset_options(self):
+        """Reset every option on both tabs to its factory default."""
+        self._on_reset_options_clicked()
+
+    @Slot()
+    def _on_reset_options_clicked(self):
+        """Called by the Reset Options button in the tab-bar corner."""
+        self._conversion_tab.reset_options()
+        self._gif_tab.reset_options()
+        self._status_label.setText("Options reset to defaults")
 
     @Slot()
     def _show_settings(self):
