@@ -7,10 +7,12 @@ import os
 from typing import Optional, List
 
 from PySide6.QtCore import (
-    Qt, QThread, Signal, Slot, QSize, QSettings, QUrl, QTimer
+    Qt, QThread, Signal, Slot, QSize, QSettings, QUrl, QTimer,
+    QRect, QRectF, QPointF
 )
 from PySide6.QtGui import (
-    QAction, QIcon, QKeySequence, QPixmap, QDesktopServices, QImage
+    QAction, QIcon, QKeySequence, QPixmap, QDesktopServices, QImage,
+    QPainter, QColor, QPen, QBrush
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -235,70 +237,359 @@ class DropLineEdit(QLineEdit):
 
 
 class ImagePreviewWidget(QWidget):
-    """Displays a scaled preview of the currently selected image or video frame."""
+    """Displays a scaled preview of an image or video frame.
+
+    Optionally renders an interactive crop overlay whose left / top / right /
+    bottom edges can be dragged independently. Crop values are always stored
+    in source-image pixel coordinates so that they survive scrubbing (every
+    video frame has the same source dimensions).
+    """
+
+    # (left, top, right, bottom) in source pixels
+    crop_changed = Signal(int, int, int, int)
+
+    _NONE = 0
+    _LEFT = 1
+    _RIGHT = 2
+    _TOP = 4
+    _BOTTOM = 8
+
+    _HIT_TOLERANCE = 8
+    _MIN_CROP_SIZE = 4
+    _HANDLE_SIZE = 6
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._pixmap = None
-        self._setup_ui()
+        self._pixmap: Optional[QPixmap] = None
+        self._message = "No preview available"
+        self._display_rect = QRect()
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # Crop state (source pixel coordinates)
+        self._crop_enabled = False
+        self._crop_ltrb = (0, 0, 0, 0)
 
-        self._label = QLabel("No preview available")
-        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._label.setMinimumSize(200, 150)
-        self._label.setStyleSheet("""
-            QLabel {
-                background-color: #2b2b2b;
-                border: 1px solid #444;
-                border-radius: 4px;
-                color: #888;
-            }
-        """)
-        layout.addWidget(self._label)
+        # Drag state
+        self._drag_flags = self._NONE
+        self._drag_start_pos: Optional[QPointF] = None
+        self._drag_start_ltrb = None
+
+        self.setMinimumSize(200, 150)
+        self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    # --- Public API -
 
     def set_image(self, path: str):
         if not path or not os.path.isfile(path):
             self.clear()
             return
-
         pixmap = QPixmap(path)
         if pixmap.isNull():
-            self._label.setText("Cannot load image")
-            self._pixmap = None
+            self.set_message("Cannot load image")
             return
-
         self.set_pixmap(pixmap)
 
     def set_pixmap(self, pixmap: QPixmap):
-        """Display a QPixmap directly (used for video scrub frames)."""
+        """Display a QPixmap directly (used for video scrub frames).
+
+        Crucially this does NOT reset the crop rectangle, so scrubbing never
+        interferes with the user's crop selection.
+        """
         if pixmap is None or pixmap.isNull():
             self.clear()
             return
         self._pixmap = pixmap
-        self._update_display()
+        self._message = ""
+
+        # Clamp existing crop values to the new pixmap size (matters only if
+        # the user loads a differently-sized video while crop is enabled).
+        if self._crop_enabled:
+            old = self._crop_ltrb
+            self._crop_ltrb = self._clamp_ltrb(
+                self._crop_ltrb, pixmap.width(), pixmap.height()
+            )
+            if old != self._crop_ltrb:
+                self.crop_changed.emit(*self._crop_ltrb)
+
+        self._update_display_rect()
+        self.update()
 
     def clear(self):
         self._pixmap = None
-        self._label.setPixmap(QPixmap())
-        self._label.setText("No preview available")
+        self._message = "No preview available"
+        self.update()
 
-    def _update_display(self):
-        if not self._pixmap:
+    def set_message(self, text: str):
+        """Show a text message instead of a pixmap (e.g. missing OpenCV)."""
+        self._pixmap = None
+        self._message = text
+        self.update()
+
+    def set_crop_enabled(self, enabled: bool):
+        if self._crop_enabled == enabled:
             return
+        self._crop_enabled = enabled
+        self.update()
 
-        scaled = self._pixmap.scaled(
-            self._label.size() - QSize(20, 20),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+    def is_crop_enabled(self) -> bool:
+        return self._crop_enabled
+
+    def set_crop_ltrb(self, l: int, t: int, r: int, b: int):
+        """Set crop from edge offsets. Values are clamped to the pixmap."""
+        original = (int(l), int(t), int(r), int(b))
+        if self._pixmap is not None:
+            self._crop_ltrb = self._clamp_ltrb(
+                original, self._pixmap.width(), self._pixmap.height()
+            )
+        else:
+            self._crop_ltrb = tuple(max(0, v) for v in original)
+
+        # If clamping changed the values, tell listeners so the spin boxes
+        # can be brought back in sync.
+        if self._crop_ltrb != original:
+            self.crop_changed.emit(*self._crop_ltrb)
+        self.update()
+
+    def get_crop_ltrb(self):
+        return self._crop_ltrb
+
+    # --- Helpers --
+
+    @staticmethod
+    def _clamp_ltrb(ltrb, w: int, h: int):
+        l, t, r, b = (int(v) for v in ltrb)
+        l = max(0, min(l, w - 1))
+        t = max(0, min(t, h - 1))
+        r = max(0, min(r, w - 1))
+        b = max(0, min(b, h - 1))
+        if w - l - r < 1:
+            r = max(0, w - l - 1)
+            if w - l - r < 1:
+                l = max(0, w - r - 1)
+        if h - t - b < 1:
+            b = max(0, h - t - 1)
+            if h - t - b < 1:
+                t = max(0, h - b - 1)
+        return (l, t, r, b)
+
+    def _update_display_rect(self):
+        """Where the scaled pixmap is drawn, in widget coordinates."""
+        if self._pixmap is None:
+            self._display_rect = QRect()
+            return
+        avail = self.rect().adjusted(1, 1, -1, -1)   # 1 px inner border
+        pw, ph = self._pixmap.width(), self._pixmap.height()
+        if pw <= 0 or ph <= 0 or avail.width() <= 0 or avail.height() <= 0:
+            self._display_rect = QRect()
+            return
+        scale = min(avail.width() / pw, avail.height() / ph)
+        dw = max(1, int(pw * scale))
+        dh = max(1, int(ph * scale))
+        dx = avail.x() + (avail.width() - dw) // 2
+        dy = avail.y() + (avail.height() - dh) // 2
+        self._display_rect = QRect(dx, dy, dw, dh)
+
+    def _crop_rect_in_display(self) -> QRectF:
+        if self._pixmap is None or self._display_rect.isEmpty():
+            return QRectF()
+        l, t, r, b = self._crop_ltrb
+        pw, ph = self._pixmap.width(), self._pixmap.height()
+        sx = self._display_rect.width() / pw
+        sy = self._display_rect.height() / ph
+        return QRectF(
+            self._display_rect.x() + l * sx,
+            self._display_rect.y() + t * sy,
+            (pw - l - r) * sx,
+            (ph - t - b) * sy,
         )
-        self._label.setPixmap(scaled)
+
+    def _display_to_source(self, x: float, y: float):
+        if self._display_rect.isEmpty() or self._pixmap is None:
+            return (0.0, 0.0)
+        sx = self._pixmap.width() / self._display_rect.width()
+        sy = self._pixmap.height() / self._display_rect.height()
+        return ((x - self._display_rect.x()) * sx,
+                (y - self._display_rect.y()) * sy)
+
+    # --- Painting -
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.fillRect(self.rect(), QColor("#2b2b2b"))
+
+        if self._pixmap is None:
+            painter.setPen(QColor("#888"))
+            painter.drawText(self.rect(),
+                             Qt.AlignmentFlag.AlignCenter, self._message)
+        else:
+            self._update_display_rect()
+            if not self._display_rect.isEmpty():
+                scaled = self._pixmap.scaled(
+                    self._display_rect.size(),
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                painter.drawPixmap(self._display_rect.topLeft(), scaled)
+                if self._crop_enabled:
+                    self._paint_crop_overlay(painter)
+
+        # Border
+        painter.setPen(QColor("#444"))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+
+    def _paint_crop_overlay(self, painter: QPainter):
+        crop_disp = self._crop_rect_in_display()
+        if crop_disp.isEmpty():
+            return
+        disp = QRectF(self._display_rect)
+
+        # Dim everything outside the crop region.
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 140))
+        painter.drawRect(QRectF(disp.x(), disp.y(),
+                                disp.width(), crop_disp.y() - disp.y()))
+        painter.drawRect(QRectF(disp.x(), crop_disp.bottom(),
+                                disp.width(), disp.bottom() - crop_disp.bottom()))
+        painter.drawRect(QRectF(disp.x(), crop_disp.y(),
+                                crop_disp.x() - disp.x(), crop_disp.height()))
+        painter.drawRect(QRectF(crop_disp.right(), crop_disp.y(),
+                                disp.right() - crop_disp.right(),
+                                crop_disp.height()))
+
+        # Crop border
+        pen = QPen(QColor("#5BCEFA"))
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(crop_disp)
+
+        # Handles (corners + edge midpoints)
+        hs = self._HANDLE_SIZE
+        painter.setPen(QPen(QColor("#1e1e1e"), 1))
+        painter.setBrush(QBrush(QColor("#5BCEFA")))
+        cx = crop_disp.center().x()
+        cy = crop_disp.center().y()
+        for hx, hy in (
+            (crop_disp.left(), crop_disp.top()),
+            (cx, crop_disp.top()),
+            (crop_disp.right(), crop_disp.top()),
+            (crop_disp.left(), cy),
+            (crop_disp.right(), cy),
+            (crop_disp.left(), crop_disp.bottom()),
+            (cx, crop_disp.bottom()),
+            (crop_disp.right(), crop_disp.bottom()),
+        ):
+            painter.drawRect(QRectF(hx - hs / 2, hy - hs / 2, hs, hs))
+
+    # --- Events ---
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._update_display()
+        self._update_display_rect()
+        self.update()
+
+    def _hit_test(self, pos) -> int:
+        if not self._crop_enabled or self._pixmap is None:
+            return self._NONE
+        crop_disp = self._crop_rect_in_display()
+        if crop_disp.isEmpty():
+            return self._NONE
+        tol = self._HIT_TOLERANCE
+        x, y = pos.x(), pos.y()
+        flags = self._NONE
+        if (abs(x - crop_disp.left()) <= tol
+                and crop_disp.top() - tol <= y <= crop_disp.bottom() + tol):
+            flags |= self._LEFT
+        if (abs(x - crop_disp.right()) <= tol
+                and crop_disp.top() - tol <= y <= crop_disp.bottom() + tol):
+            flags |= self._RIGHT
+        if (abs(y - crop_disp.top()) <= tol
+                and crop_disp.left() - tol <= x <= crop_disp.right() + tol):
+            flags |= self._TOP
+        if (abs(y - crop_disp.bottom()) <= tol
+                and crop_disp.left() - tol <= x <= crop_disp.right() + tol):
+            flags |= self._BOTTOM
+        return flags
+
+    def _update_cursor_for_flags(self, flags: int):
+        if flags == self._NONE:
+            self.unsetCursor()
+        elif flags in (self._LEFT | self._TOP, self._RIGHT | self._BOTTOM):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif flags in (self._RIGHT | self._TOP, self._LEFT | self._BOTTOM):
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        elif flags in (self._LEFT, self._RIGHT):
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif flags in (self._TOP, self._BOTTOM):
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        else:
+            self.unsetCursor()
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton:
+            return super().mousePressEvent(event)
+        if not self._crop_enabled or self._pixmap is None:
+            return
+        flags = self._hit_test(event.position())
+        if flags != self._NONE:
+            self._drag_flags = flags
+            self._drag_start_pos = event.position()
+            self._drag_start_ltrb = self._crop_ltrb
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_flags != self._NONE and self._drag_start_pos is not None:
+            self._apply_drag(event.position())
+            event.accept()
+            return
+        if self._crop_enabled:
+            self._update_cursor_for_flags(self._hit_test(event.position()))
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton:
+            return super().mouseReleaseEvent(event)
+        if self._drag_flags != self._NONE:
+            self._drag_flags = self._NONE
+            self._drag_start_pos = None
+            self._drag_start_ltrb = None
+            event.accept()
+
+    def _apply_drag(self, pos):
+        if (self._pixmap is None or self._drag_start_pos is None
+                or self._drag_start_ltrb is None):
+            return
+
+        x0, y0 = self._display_to_source(self._drag_start_pos.x(),
+                                         self._drag_start_pos.y())
+        x1, y1 = self._display_to_source(pos.x(), pos.y())
+        dx = int(round(x1 - x0))
+        dy = int(round(y1 - y0))
+
+        l, t, r, b = self._drag_start_ltrb
+        pw, ph = self._pixmap.width(), self._pixmap.height()
+        min_size = self._MIN_CROP_SIZE
+
+        if self._drag_flags & self._LEFT:
+            max_l = pw - r - min_size
+            l = max(0, min(l + dx, max_l))
+        if self._drag_flags & self._RIGHT:
+            max_r = pw - l - min_size
+            r = max(0, min(r - dx, max_r))
+        if self._drag_flags & self._TOP:
+            max_t = ph - b - min_size
+            t = max(0, min(t + dy, max_t))
+        if self._drag_flags & self._BOTTOM:
+            max_b = ph - t - min_size
+            b = max(0, min(b - dy, max_b))
+
+        new_ltrb = (l, t, r, b)
+        if new_ltrb != self._crop_ltrb:
+            self._crop_ltrb = new_ltrb
+            self.update()
+            self.crop_changed.emit(*new_ltrb)
 
 
 class ImageConversionTab(QWidget):
@@ -596,7 +887,7 @@ class ImageConversionTab(QWidget):
         self._progress_label.setText("Error occurred")
         QMessageBox.critical(self, "Conversion Error", message)
 
-    # -- Persistence ---------------------------------------------------------
+    # -- Persistence --
 
     def save_settings(self, settings: QSettings):
         settings.setValue("conv_format", self._format_combo.currentText())
@@ -623,10 +914,21 @@ class ImageConversionTab(QWidget):
 class GIFCreationTab(QWidget):
     """Tab for GIF creation from image files or from a video."""
 
+    # Comparison tolerance for "is the FPS the same as the detected value".
+    _FPS_MATCH_EPSILON = 0.01
+
+    # Divisors used to build the size preset list from a source resolution.
+    _SIZE_PRESET_DIVISORS = (2, 3, 4, 5, 6, 8, 10)
+    # Don't offer presets smaller than this many pixels on either axis.
+    _SIZE_PRESET_MIN_PIXELS = 32
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._worker = None
         self._input_files: List[str] = []
+
+        # Guards the spin-box <-> preview crop sync loop.
+        self._updating_crop = False
 
         # Video scrubber state
         self._video_capture = None
@@ -634,6 +936,13 @@ class GIFCreationTab(QWidget):
         self._video_total_frames = 0
         self._video_duration_ms = 0
         self._pending_scrub_ms = 0
+
+        # Native FPS of the currently loaded video (0 if none / not video mode).
+        self._detected_video_fps = 0.0
+
+        # Source resolution detected from video or first image (0 = unknown).
+        self._source_width = 0
+        self._source_height = 0
 
         # Debounce: avoid decoding a frame on every single slider tick
         # while the user is dragging.
@@ -707,27 +1016,11 @@ class GIFCreationTab(QWidget):
         input_layout.addLayout(self._file_buttons_layout)
 
         self._preview = ImagePreviewWidget()
-        self._preview.setMaximumHeight(150)
+        self._preview.setMinimumHeight(220)
+        self._preview.setMaximumHeight(320)
         input_layout.addWidget(self._preview)
 
         main_layout.addWidget(input_group)
-
-        # --- Output group ---
-        output_group = QGroupBox("Output")
-        output_layout = QVBoxLayout(output_group)
-
-        output_path_layout = QHBoxLayout()
-        output_path_layout.addWidget(QLabel("Output GIF:"))
-        self._output_path_edit = QLineEdit()
-        self._output_path_edit.setPlaceholderText("Select output GIF file path...")
-        output_path_layout.addWidget(self._output_path_edit, 1)
-
-        self._browse_output_btn = QPushButton("Browse...")
-        output_path_layout.addWidget(self._browse_output_btn)
-
-        output_layout.addLayout(output_path_layout)
-
-        main_layout.addWidget(output_group)
 
         # --- Video-only settings group ---
         # Placed above GIF Settings so that, in video mode, the
@@ -846,8 +1139,18 @@ class GIFCreationTab(QWidget):
         self._fps_spin.setRange(0.1, 60.0)
         self._fps_spin.setValue(10.0)
         self._fps_spin.setSingleStep(0.5)
+        self._fps_spin.setDecimals(3)
         self._fps_spin.setSuffix(" fps")
         left_form.addRow("Frame Rate:", self._fps_spin)
+
+        # Hint shown under the Frame Rate field when the user has changed the
+        # value away from the video's native frame rate. Hidden otherwise.
+        self._detected_fps_hint = QLabel("")
+        self._detected_fps_hint.setStyleSheet(
+            "color: #888; font-size: 11px; padding-left: 4px;"
+        )
+        self._detected_fps_hint.setVisible(False)
+        left_form.addRow("", self._detected_fps_hint)
 
         self._loop_spin = QSpinBox()
         self._loop_spin.setRange(0, 1000)
@@ -869,20 +1172,56 @@ class GIFCreationTab(QWidget):
         right_form = QFormLayout()
         right_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        # Size: "Auto" (0) means keep original dimensions.
-        size_layout = QHBoxLayout()
+        # --- Size: preset list (default) OR custom typed values ---
+        self._size_mode_group = QButtonGroup(self)
+        self._size_preset_radio = QRadioButton("Preset")
+        self._size_preset_radio.setChecked(True)
+        self._size_preset_radio.setToolTip(
+            "Pick a scaled-down multiple of the source resolution."
+        )
+        self._size_custom_radio = QRadioButton("Custom")
+        self._size_custom_radio.setToolTip(
+            "Type an exact Width x Height. Set both to Auto to keep the "
+            "original size."
+        )
+        self._size_mode_group.addButton(self._size_preset_radio, 0)
+        self._size_mode_group.addButton(self._size_custom_radio, 1)
+
+        size_mode_layout = QHBoxLayout()
+        size_mode_layout.addWidget(self._size_preset_radio)
+        size_mode_layout.addWidget(self._size_custom_radio)
+        size_mode_layout.addStretch()
+        right_form.addRow("Size Mode:", size_mode_layout)
+
+        # Preset combo (default when a source resolution is known).
+        self._size_preset_combo = QComboBox()
+        self._size_preset_combo.addItem("Original", None)
+
+        # Custom W x H row (hidden until the Custom radio is chosen).
+        self._custom_size_widget = QWidget()
+        custom_size_layout = QHBoxLayout(self._custom_size_widget)
+        custom_size_layout.setContentsMargins(0, 0, 0, 0)
         self._width_spin = QSpinBox()
         self._width_spin.setRange(0, 4096)
         self._width_spin.setValue(0)
         self._width_spin.setSpecialValueText("Auto")
-        size_layout.addWidget(self._width_spin)
-        size_layout.addWidget(QLabel("x"))
+        custom_size_layout.addWidget(self._width_spin)
+        custom_size_layout.addWidget(QLabel("x"))
         self._height_spin = QSpinBox()
         self._height_spin.setRange(0, 4096)
         self._height_spin.setValue(0)
         self._height_spin.setSpecialValueText("Auto")
-        size_layout.addWidget(self._height_spin)
-        right_form.addRow("Size (WxH):", size_layout)
+        custom_size_layout.addWidget(self._height_spin)
+        self._custom_size_widget.setVisible(False)
+
+        # Container holding both the combo and the custom row; only one is
+        # ever visible at a time.
+        size_stack = QWidget()
+        size_stack_layout = QHBoxLayout(size_stack)
+        size_stack_layout.setContentsMargins(0, 0, 0, 0)
+        size_stack_layout.addWidget(self._size_preset_combo, 1)
+        size_stack_layout.addWidget(self._custom_size_widget)
+        right_form.addRow("Size:", size_stack)
 
         # Crop: L / T / R / B pixel counts, all 0 = no crop.
         crop_layout = QHBoxLayout()
@@ -904,9 +1243,33 @@ class GIFCreationTab(QWidget):
         crop_layout.addWidget(self._crop_bottom)
         right_form.addRow("Crop (LTRB):", crop_layout)
 
+        self._crop_overlay_check = QCheckBox("Enable interactive crop overlay on preview")
+        self._crop_overlay_check.setToolTip(
+            "Drag the edges of the highlighted rectangle on the preview to set the "
+            "crop. The LTRB values above stay in sync automatically."
+        )
+        right_form.addRow("", self._crop_overlay_check)
+
         settings_layout.addLayout(right_form)
 
         main_layout.addWidget(settings_group)
+
+        # --- Output group ---
+        output_group = QGroupBox("Output")
+        output_layout = QVBoxLayout(output_group)
+
+        output_path_layout = QHBoxLayout()
+        output_path_layout.addWidget(QLabel("Output GIF:"))
+        self._output_path_edit = QLineEdit()
+        self._output_path_edit.setPlaceholderText("Select output GIF file path...")
+        output_path_layout.addWidget(self._output_path_edit, 1)
+
+        self._browse_output_btn = QPushButton("Browse...")
+        output_path_layout.addWidget(self._browse_output_btn)
+
+        output_layout.addLayout(output_path_layout)
+
+        main_layout.addWidget(output_group)
 
         # --- Progress group ---
         progress_group = QGroupBox("Progress")
@@ -963,6 +1326,20 @@ class GIFCreationTab(QWidget):
         self._set_start_btn.clicked.connect(self._set_start_from_scrubber)
         self._set_end_btn.clicked.connect(self._set_end_from_scrubber)
 
+        # Crop overlay <-> spin box sync.
+        self._preview.crop_changed.connect(self._on_preview_crop_changed)
+        self._crop_left.valueChanged.connect(self._on_crop_spin_changed)
+        self._crop_top.valueChanged.connect(self._on_crop_spin_changed)
+        self._crop_right.valueChanged.connect(self._on_crop_spin_changed)
+        self._crop_bottom.valueChanged.connect(self._on_crop_spin_changed)
+        self._crop_overlay_check.toggled.connect(self._on_crop_overlay_toggled)
+
+        # Frame-rate hint under the Frame Rate spin box.
+        self._fps_spin.valueChanged.connect(self._update_fps_hint)
+
+        # Size mode radio toggles which size widget is visible.
+        self._size_mode_group.buttonClicked.connect(self._on_size_mode_changed)
+
     def _on_input_type_changed(self, button):
         # input_type == 0 -> video mode, == 1 -> files mode.
         input_type = self._input_type_group.id(button)
@@ -996,6 +1373,13 @@ class GIFCreationTab(QWidget):
         self._set_start_btn.setEnabled(False)
         self._set_end_btn.setEnabled(False)
 
+        # Drop any detected FPS / source resolution and hide the hint.
+        self._detected_video_fps = 0.0
+        self._source_width = 0
+        self._source_height = 0
+        self._reset_size_presets()
+        self._update_fps_hint()
+
     def _browse_input(self):
         # Only reachable in video mode.
         file_filter = (
@@ -1023,12 +1407,18 @@ class GIFCreationTab(QWidget):
                 self._files_list.addItem(os.path.basename(path))
 
         if self._input_files:
-            self._preview.set_image(self._input_files[0])
+            first = self._input_files[0]
+            self._preview.set_image(first)
+            # Populate size presets from the first image's dimensions.
+            pm = QPixmap(first)
+            if not pm.isNull():
+                self._set_source_resolution(pm.width(), pm.height())
 
     def _clear_files(self):
         self._input_files.clear()
         self._files_list.clear()
         self._preview.clear()
+        self._set_source_resolution(0, 0)
 
     def _remove_selected_files(self):
         for item in self._files_list.selectedItems():
@@ -1038,9 +1428,14 @@ class GIFCreationTab(QWidget):
                 del self._input_files[row]
 
         if self._input_files:
-            self._preview.set_image(self._input_files[0])
+            first = self._input_files[0]
+            self._preview.set_image(first)
+            pm = QPixmap(first)
+            if not pm.isNull():
+                self._set_source_resolution(pm.width(), pm.height())
         else:
             self._preview.clear()
+            self._set_source_resolution(0, 0)
 
     def _on_file_selected(self):
         items = self._files_list.selectedItems()
@@ -1058,11 +1453,21 @@ class GIFCreationTab(QWidget):
         ext = os.path.splitext(text)[1].lower()
         if ext in ('.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'):
             self._load_video_info(text)
+
+            # Default the output path to the same directory as the video,
+            # using the video's base name and a .gif extension - but only
+            # if the user hasn't already typed an output path.
+            if not self._output_path_edit.text().strip():
+                base, _ = os.path.splitext(text)
+                self._output_path_edit.setText(base + ".gif")
         else:
             self._release_video_capture()
+            self._detected_video_fps = 0.0
+            self._set_source_resolution(0, 0)
+            self._update_fps_hint()
             self._preview.set_image(text)
 
-    # -- Video scrubber -----------------------------------------------------
+    # -- Video scrubber 
 
     def _load_video_info(self, path: str):
         """Open the video and set up the scrubber range."""
@@ -1075,8 +1480,7 @@ class GIFCreationTab(QWidget):
             self._set_start_btn.setEnabled(False)
             self._set_end_btn.setEnabled(False)
             self._scrubber_time_label.setText("OpenCV not installed")
-            self._preview.clear()
-            self._preview._label.setText("Install opencv-python-headless to scrub")
+            self._preview.set_message("Install opencv-python-headless to scrub")
             return
 
         cap = cv2.VideoCapture(path)
@@ -1087,6 +1491,8 @@ class GIFCreationTab(QWidget):
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
         if fps <= 0 or total_frames <= 0:
             cap.release()
@@ -1098,6 +1504,17 @@ class GIFCreationTab(QWidget):
         self._video_fps = fps
         self._video_total_frames = total_frames
         self._video_duration_ms = int((total_frames / fps) * 1000)
+
+        # Auto-apply the detected FPS to the GIF Frame Rate, making it the
+        # default for this video. The hint label stays hidden while the spin
+        # value matches the detected value.
+        self._detected_video_fps = fps
+        self._fps_spin.setValue(fps)
+        self._update_fps_hint()
+
+        # Populate the size preset list from the video's native resolution.
+        if src_w > 0 and src_h > 0:
+            self._set_source_resolution(src_w, src_h)
 
         self._scrubber.setRange(0, self._video_duration_ms)
         self._scrubber.setPageStep(max(1, self._video_duration_ms // 20))
@@ -1195,7 +1612,118 @@ class GIFCreationTab(QWidget):
         self._scrub_timer.stop()
         self._release_video_capture()
 
-    # -----------------------------------------------------------------------
+    # -- Size presets 
+
+    def _set_source_resolution(self, width: int, height: int):
+        """Record the source resolution and rebuild the size preset list."""
+        self._source_width = max(0, int(width))
+        self._source_height = max(0, int(height))
+        self._populate_size_presets()
+
+    def _reset_size_presets(self):
+        self._source_width = 0
+        self._source_height = 0
+        self._populate_size_presets()
+
+    def _populate_size_presets(self):
+        """Fill the size preset combo from the recorded source resolution.
+
+        For a 1920x1080 source this produces entries like:
+            Original (1920x1080)
+            960x540 (1/2)
+            640x360 (1/3)
+            480x270 (1/4)
+            ...
+        """
+        self._size_preset_combo.blockSignals(True)
+        previous_data = self._size_preset_combo.currentData()
+        self._size_preset_combo.clear()
+
+        w = self._source_width
+        h = self._source_height
+
+        if w <= 0 or h <= 0:
+            self._size_preset_combo.addItem("Original", None)
+        else:
+            self._size_preset_combo.addItem(f"Original ({w}x{h})", None)
+            for div in self._SIZE_PRESET_DIVISORS:
+                pw = w // div
+                ph = h // div
+                if pw < self._SIZE_PRESET_MIN_PIXELS or ph < self._SIZE_PRESET_MIN_PIXELS:
+                    continue
+                self._size_preset_combo.addItem(
+                    f"{pw}x{ph} (1/{div})", (pw, ph)
+                )
+
+        # Try to restore the previously selected preset if it's still present.
+        if previous_data is not None:
+            for i in range(self._size_preset_combo.count()):
+                if self._size_preset_combo.itemData(i) == previous_data:
+                    self._size_preset_combo.setCurrentIndex(i)
+                    break
+
+        self._size_preset_combo.blockSignals(False)
+
+    def _on_size_mode_changed(self, button):
+        is_custom = (self._size_mode_group.id(button) == 1)
+        self._size_preset_combo.setVisible(not is_custom)
+        self._custom_size_widget.setVisible(is_custom)
+
+    # -- Crop overlay 
+
+    def _on_crop_overlay_toggled(self, checked: bool):
+        if checked:
+            # Seed the widget from whatever is currently in the spin boxes.
+            self._preview.set_crop_ltrb(
+                self._crop_left.value(),
+                self._crop_top.value(),
+                self._crop_right.value(),
+                self._crop_bottom.value(),
+            )
+            self._preview.set_crop_enabled(True)
+        else:
+            self._preview.set_crop_enabled(False)
+
+    def _on_preview_crop_changed(self, l: int, t: int, r: int, b: int):
+        """User dragged an edge on the preview -> update the spin boxes."""
+        self._updating_crop = True
+        try:
+            self._crop_left.setValue(l)
+            self._crop_top.setValue(t)
+            self._crop_right.setValue(r)
+            self._crop_bottom.setValue(b)
+        finally:
+            self._updating_crop = False
+
+    def _on_crop_spin_changed(self, _value=None):
+        """User edited a spin box -> update the crop rectangle."""
+        if self._updating_crop:
+            return
+        self._preview.set_crop_ltrb(
+            self._crop_left.value(),
+            self._crop_top.value(),
+            self._crop_right.value(),
+            self._crop_bottom.value(),
+        )
+
+    # -- Frame rate hint 
+
+    def _update_fps_hint(self, _value=None):
+        """Show the video's native FPS under Frame Rate when the user has
+        changed the output FPS away from the detected value."""
+        if self._detected_video_fps <= 0:
+            self._detected_fps_hint.setVisible(False)
+            return
+
+        current = self._fps_spin.value()
+        if abs(current - self._detected_video_fps) < self._FPS_MATCH_EPSILON:
+            # User is on the detected frame rate: nothing to point out.
+            self._detected_fps_hint.setVisible(False)
+        else:
+            self._detected_fps_hint.setText(
+                f"Video native: {self._detected_video_fps:g} fps"
+            )
+            self._detected_fps_hint.setVisible(True)
 
     def _browse_output(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -1244,6 +1772,15 @@ class GIFCreationTab(QWidget):
         else:
             return self._input_files
 
+    def _get_size(self):
+        """Resolve the size tuple from the currently selected size mode."""
+        if self._size_custom_radio.isChecked():
+            width = self._width_spin.value()
+            height = self._height_spin.value()
+            return (width, height) if width > 0 and height > 0 else None
+        # Preset mode.
+        return self._size_preset_combo.currentData()
+
     def _start_creation(self):
         if not self._validate_inputs():
             return
@@ -1256,10 +1793,9 @@ class GIFCreationTab(QWidget):
         colors = self._colors_spin.value()
         dither = self._dither_check.isChecked()
 
-        # Size: only pass a tuple if both dimensions are set.
-        width = self._width_spin.value()
-        height = self._height_spin.value()
-        size = (width, height) if width > 0 and height > 0 else None
+        # Size comes from either the preset combo (default) or the custom
+        # width/height spin boxes, depending on the selected size mode.
+        size = self._get_size()
 
         # Crop: only pass a tuple if any side has a non-zero value.
         crop_l = self._crop_left.value()
@@ -1321,6 +1857,9 @@ class GIFCreationTab(QWidget):
         self._loop_spin.setEnabled(enabled)
         self._colors_spin.setEnabled(enabled)
         self._dither_check.setEnabled(enabled)
+        self._size_preset_radio.setEnabled(enabled)
+        self._size_custom_radio.setEnabled(enabled)
+        self._size_preset_combo.setEnabled(enabled)
         self._width_spin.setEnabled(enabled)
         self._height_spin.setEnabled(enabled)
         self._crop_left.setEnabled(enabled)
@@ -1330,6 +1869,7 @@ class GIFCreationTab(QWidget):
         self._start_time_spin.setEnabled(enabled)
         self._end_time_spin.setEnabled(enabled)
         self._skip_frames_spin.setEnabled(enabled)
+        self._crop_overlay_check.setEnabled(enabled)
 
         has_video = self._video_capture is not None
         self._scrubber.setEnabled(enabled and has_video)
@@ -1369,12 +1909,14 @@ class GIFCreationTab(QWidget):
         settings.setValue("gif_loop", self._loop_spin.value())
         settings.setValue("gif_colors", self._colors_spin.value())
         settings.setValue("gif_dither", self._dither_check.isChecked())
+        settings.setValue("gif_size_mode", self._size_mode_group.checkedId())
         settings.setValue("gif_width", self._width_spin.value())
         settings.setValue("gif_height", self._height_spin.value())
         settings.setValue("gif_crop_l", self._crop_left.value())
         settings.setValue("gif_crop_t", self._crop_top.value())
         settings.setValue("gif_crop_r", self._crop_right.value())
         settings.setValue("gif_crop_b", self._crop_bottom.value())
+        settings.setValue("gif_crop_overlay", self._crop_overlay_check.isChecked())
         settings.setValue("gif_start_time", self._start_time_spin.value())
         settings.setValue("gif_end_time", self._end_time_spin.value())
         settings.setValue("gif_skip_frames", self._skip_frames_spin.value())
@@ -1396,6 +1938,17 @@ class GIFCreationTab(QWidget):
         self._loop_spin.setValue(settings.value("gif_loop", 0, type=int))
         self._colors_spin.setValue(settings.value("gif_colors", 256, type=int))
         self._dither_check.setChecked(settings.value("gif_dither", True, type=bool))
+
+        size_mode = settings.value("gif_size_mode", 0, type=int)
+        if size_mode == 1:
+            self._size_custom_radio.setChecked(True)
+        else:
+            self._size_preset_radio.setChecked(True)
+        # Apply the visibility that matches the restored radio state.
+        self._on_size_mode_changed(
+            self._size_custom_radio if size_mode == 1 else self._size_preset_radio
+        )
+
         self._width_spin.setValue(settings.value("gif_width", 0, type=int))
         self._height_spin.setValue(settings.value("gif_height", 0, type=int))
         self._crop_left.setValue(settings.value("gif_crop_l", 0, type=int))
@@ -1409,6 +1962,12 @@ class GIFCreationTab(QWidget):
         out = settings.value("gif_output_path", "", type=str)
         if out:
             self._output_path_edit.setText(out)
+
+        # Must be last: seeding the crop from the spin-box values depends on
+        # the other crop settings having been restored first.
+        self._crop_overlay_check.setChecked(
+            settings.value("gif_crop_overlay", False, type=bool)
+        )
 
 
 class HelpDialog(QDialog):
@@ -1456,6 +2015,12 @@ class HelpDialog(QDialog):
             motion but larger files. For real-time playback of a video,
             see the Skip Frames section below.</p>
 
+            <p>When a video is loaded in <b>From Video</b> mode, its
+            native frame rate is detected automatically and used as the
+            default Frame Rate. If you change the Frame Rate away from
+            that value, a small hint appears under the field showing the
+            video's native fps so you can always find your way back.</p>
+
             <h3>Loop Count</h3>
             <p>How many times the GIF repeats. <code>0</code> = infinite
             (recommended for most GIFs).</p>
@@ -1469,15 +2034,32 @@ class HelpDialog(QDialog):
             perceived quality but can increase file size. Disable for
             flat colors or a retro/pixel-art look.</p>
 
-            <h3>Size (W x H)</h3>
-            <p>Optional resize target. Aspect ratio is preserved, so the
-            frame fits inside the given box. Set both to <em>Auto</em>
-            to keep the original size.</p>
+            <h3>Size</h3>
+            <p>The output size is chosen in one of two modes:</p>
+            <ul>
+                <li><b>Preset</b> (default): a dropdown listing scaled
+                multiples of the source resolution. For a 1920x1080
+                video this offers 1920x1080 (original), 960x540 (1/2),
+                640x360 (1/3), 480x270 (1/4), and so on. Presets are
+                populated automatically when a video is loaded or the
+                first image is added.</li>
+                <li><b>Custom</b>: type any Width x Height directly.
+                Set both to <em>Auto</em> to keep the original size.</li>
+            </ul>
+            <p>In both modes the aspect ratio is preserved, so the
+            frame fits inside the chosen box.</p>
 
             <h3>Crop (LTRB)</h3>
             <p>Trim N pixels off each edge of every frame before
             encoding. L = Left, T = Top, R = Right, B = Bottom. All 0
             means no crop.</p>
+
+            <p>Enable <b>Interactive crop overlay on preview</b> to see
+            the crop rectangle drawn on top of the video preview. Each
+            of the four edges can be dragged independently; the LTRB
+            spin boxes update automatically, and editing the spin boxes
+            moves the rectangle in return. Scrubbing the timeline does
+            not reset your crop selection.</p>
 
             <h2>Video Settings</h2>
 
@@ -1527,6 +2109,14 @@ class HelpDialog(QDialog):
             <p class="note">Scrubbing requires OpenCV
             (<code>opencv-python-headless</code>). If it isn't installed,
             the scrubber is disabled and a hint is shown in the preview.</p>
+
+            <h3>Output GIF path</h3>
+            <p>When you pick a video in <b>From Video</b> mode and the
+            Output GIF field is empty, TransImage automatically fills in
+            a path in the same folder as the video, using the video's
+            file name with a <code>.gif</code> extension. You can always
+            overwrite this by typing your own path or clicking
+            <b>Browse...</b>.</p>
 
             <h2>Tips &amp; Shortcuts</h2>
             <ul>
@@ -1676,6 +2266,9 @@ class TransImageWindow(QMainWindow):
 
         self._tabs.setTabIcon(0, QIcon.fromTheme("image-x-generic"))
         self._tabs.setTabIcon(1, QIcon.fromTheme("video-x-generic"))
+
+        # GIF Creation is the tab that opens by default.
+        self._tabs.setCurrentIndex(1)
 
         self.setCentralWidget(self._tabs)
 
@@ -2019,8 +2612,9 @@ class TransImageWindow(QMainWindow):
                 "conv_format", "conv_quality", "conv_keep_original",
                 "conv_output_path",
                 "gif_input_type", "gif_fps", "gif_loop", "gif_colors",
-                "gif_dither", "gif_width", "gif_height",
+                "gif_dither", "gif_size_mode", "gif_width", "gif_height",
                 "gif_crop_l", "gif_crop_t", "gif_crop_r", "gif_crop_b",
+                "gif_crop_overlay",
                 "gif_start_time", "gif_end_time", "gif_skip_frames",
                 "gif_output_path",
             ):
