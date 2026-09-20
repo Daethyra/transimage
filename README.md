@@ -190,7 +190,9 @@ Please submit issues regarding any oversight you see. Pull requests for improvem
 
 ### 3.1.0 (17-09-2026)
 - Added a Qt GUI for the program and packaged it into an `.exe` via Pyinstaller that includes all the same functionality
-- Added per-session settings persistence with a reset-on-startup option
+    - Per-session settings persistence with a reset-on-startup option
+    - Video preview + scrubbing functionality for easy start/end time selection
+        - Interactive crop overlay
 
 ### 3.0.0 (25-06-2026)
 - Revamped `--crop` to be more intuitive. Crop now takes the number of pixels to cut off, instead of requiring the user to provide the exact measurements of 
