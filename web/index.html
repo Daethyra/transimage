@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>TransImage - video &amp; image to GIF, in your browser</title>
+  <meta name="description" content="Convert videos to GIFs and images between formats. No uploads, no ads, no tracking - everything runs locally in your browser." />
+  <meta property="og:title" content="TransImage" />
+  <meta property="og:description" content="Video→GIF and image conversion, entirely client-side." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='11' y='0' fill='%235BCEFA'/%3E%3Crect width='32' height='10' y='11' fill='%23F5A9B8'/%3E%3Crect width='32' height='11' y='21' fill='%23FFFFFF'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <div class="stripe" aria-hidden="true"></div>
+
+  <header>
+    <h1>TransImage</h1>
+    <p class="tagline">Video&nbsp;→&nbsp;GIF, and image conversion - entirely in your browser.</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="gif" class="active" aria-selected="true">Video → GIF</button>
+    <button role="tab" data-tab="convert" aria-selected="false">Convert images</button>
+  </nav>
+
+  <main>
+    <!-- ================= VIDEO → GIF ================= -->
+    <section id="panel-gif" class="panel" role="tabpanel">
+      <div class="dropzone" id="gif-drop">
+        <input type="file" id="gif-file" accept="video/*" hidden />
+        <p>Drop a video here, or <button type="button" class="link" id="gif-browse">browse</button></p>
+        <p class="hint">MP4, MOV, WebM, MKV - processed locally, never uploaded</p>
+      </div>
+
+      <div class="file-info hidden" id="gif-file-info"></div>
+
+      <div class="preview-wrap hidden" id="gif-preview-wrap">
+        <video id="gif-preview-video" controls playsinline muted preload="metadata"></video>
+        <img id="gif-preview-poster" class="hidden" alt="" />
+        <p class="preview-note hidden" id="gif-preview-note"></p>
+      </div>
+
+      <div class="scrub hidden" id="gif-scrub">
+        <input type="range" id="gif-scrub-range" min="0" max="100" step="0.01" value="0"
+               title="Scrub through the video, then use the buttons to mark a start or end time." />
+        <div class="scrub-time">
+          <span id="gif-time-current">0.00s</span>
+          <button type="button" class="mini" id="gif-set-start"
+                  title="Use the current playhead position as the GIF start time.">Set start</button>
+          <button type="button" class="mini" id="gif-set-end"
+                  title="Use the current playhead position as the GIF end time.">Set end</button>
+          <span class="scrub-total" id="gif-time-total">0.00s</span>
+        </div>
+      </div>
+
+      <div class="options">
+        <label title="Frames per second in the output GIF. 15 is a good default; going above 24 rarely looks better and makes the file much larger.">
+          <span>FPS</span>
+          <input type="number" id="gif-fps" value="15" min="1" max="60" step="1" />
+        </label>
+        <label title="Maximum output width in pixels. Height is scaled automatically to keep the aspect ratio.">
+          <span>Max width (px)</span>
+          <input type="number" id="gif-width" value="480" min="16" max="1920" step="1" />
+        </label>
+        <label title="Maximum colors in the GIF palette (2–256). Dropping to 128 or 64 is the single biggest way to shrink the file, at the cost of some banding.">
+          <span>Colors</span>
+          <input type="number" id="gif-colors" value="256" min="2" max="256" step="1" />
+        </label>
+        <label class="checkbox" title="Smooths color gradients by dithering. Makes the file larger. Turn it off for flat-color sources like screen recordings or animation.">
+          <input type="checkbox" id="gif-dither" checked />
+          <span>Dither</span>
+        </label>
+        <label title="Skip the beginning of the video. In seconds. Use the scrub bar above and 'Set start' to pick a time visually.">
+          <span>Start (s)</span>
+          <input type="number" id="gif-start" placeholder="0" min="0" step="0.1" />
+        </label>
+        <label title="Stop at this point. In seconds. Leave blank to use the whole video.">
+          <span>End (s)</span>
+          <input type="number" id="gif-end" placeholder="end" min="0" step="0.1" />
+        </label>
+        <label title="How many times the GIF repeats. Infinite (0) is standard.">
+          <span>Loop</span>
+          <select id="gif-loop">
+            <option value="0" selected>Infinite</option>
+            <option value="1">Once</option>
+            <option value="2">Twice</option>
+            <option value="3">3 times</option>
+            <option value="5">5 times</option>
+          </select>
+        </label>
+      </div>
+
+      <details class="advanced">
+        <summary>Advanced - crop</summary>
+        <div class="options">
+          <label title="Pixels to cut from the left edge."><span>Crop left (px)</span><input type="number" id="gif-crop-l" value="0" min="0" /></label>
+          <label title="Pixels to cut from the top edge."><span>Crop top (px)</span><input type="number" id="gif-crop-t" value="0" min="0" /></label>
+          <label title="Pixels to cut from the right edge."><span>Crop right (px)</span><input type="number" id="gif-crop-r" value="0" min="0" /></label>
+          <label title="Pixels to cut from the bottom edge."><span>Crop bottom (px)</span><input type="number" id="gif-crop-b" value="0" min="0" /></label>
+        </div>
+      </details>
+
+      <button type="button" class="primary" id="gif-convert" disabled>Create GIF</button>
+
+      <div class="error hidden" id="gif-error"></div>
+
+      <div class="progress hidden" id="gif-progress">
+        <div class="bar"><div class="fill" id="gif-progress-fill"></div></div>
+        <p class="status" id="gif-status">Working…</p>
+      </div>
+
+      <div class="result hidden" id="gif-result">
+        <img id="gif-preview" alt="GIF preview" />
+        <p class="hint" id="gif-result-meta"></p>
+        <div class="result-actions">
+          <a id="gif-download" class="primary" download="output.gif">Download GIF</a>
+          <button type="button" id="gif-reset" class="secondary">Start over</button>
+        </div>
+      </div>
+
+      <details class="advanced help-section">
+        <summary>Help &amp; tips - video → GIF</summary>
+        <div class="help-body">
+          <h4>Choosing FPS</h4>
+          <p>15 fps is a good default. Going above 24 rarely looks smoother and makes the file noticeably larger.</p>
+          <h4>Colors</h4>
+          <p>256 is the maximum GIF supports. Dropping to 128 or 64 is the single biggest way to shrink the file size, at the cost of some color banding.</p>
+          <h4>Dither</h4>
+          <p>Smooths gradients but increases file size. Turn it off for flat-color sources like screen recordings, memes, or 2D animation.</p>
+          <h4>Trim first, then resize</h4>
+          <p>Trim with the scrub bar and the Start/End buttons before exporting. Cropping or shortening the clip is always cheaper than lowering quality.</p>
+          <h4>File size tips, in order of impact</h4>
+          <ul>
+            <li>Trim the clip with Start/End.</li>
+            <li>Lower <em>Max width</em> to 320–480 px.</li>
+            <li>Reduce <em>Colors</em> to 128.</li>
+            <li>Disable <em>Dither</em>.</li>
+            <li>Lower <em>FPS</em> to 10.</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <!-- ================= IMAGE CONVERT ================= -->
+    <section id="panel-convert" class="panel hidden" role="tabpanel">
+      <div class="dropzone" id="conv-drop">
+        <input type="file" id="conv-files" accept="image/*" multiple hidden />
+        <p>Drop images here, or <button type="button" class="link" id="conv-browse">browse</button></p>
+        <p class="hint">JPEG, PNG, BMP, WebP - processed locally, never uploaded</p>
+      </div>
+
+      <div class="preview-grid hidden" id="conv-preview-grid"></div>
+
+      <div class="options">
+        <label title="Format to convert your images to. JPEG is smallest for photos, PNG preserves transparency, WebP is usually smallest overall.">
+          <span>Output format</span>
+          <select id="conv-format">
+            <option value="image/png" selected>PNG</option>
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/webp">WebP</option>
+            <option value="image/bmp">BMP</option>
+          </select>
+        </label>
+        <label title="Compression quality for JPEG and WebP (1–100). Higher = better quality, larger files. Ignored for PNG and BMP.">
+          <span>Quality (JPEG / WebP)</span>
+          <input type="number" id="conv-quality" value="92" min="1" max="100" />
+        </label>
+      </div>
+
+      <button type="button" class="primary" id="conv-convert" disabled>Convert</button>
+
+      <div class="error hidden" id="conv-error"></div>
+
+      <div class="progress hidden" id="conv-progress">
+        <div class="bar"><div class="fill" id="conv-progress-fill"></div></div>
+        <p class="status" id="conv-status"></p>
+      </div>
+
+      <div class="results-list hidden" id="conv-results"></div>
+
+      <details class="advanced help-section">
+        <summary>Help &amp; tips - image conversion</summary>
+        <div class="help-body">
+          <h4>Which format should I pick?</h4>
+          <ul>
+            <li><strong>PNG</strong> - lossless, keeps transparency. Best for screenshots, logos, graphics.</li>
+            <li><strong>JPEG</strong> - smallest for photos, no transparency. Quality 90–95 looks identical to the source.</li>
+            <li><strong>WebP</strong> - usually the smallest file with good quality, and it keeps transparency.</li>
+            <li><strong>BMP</strong> - uncompressed, large, and rarely what you want. Included for completeness.</li>
+          </ul>
+          <h4>Quality slider</h4>
+          <p>Only affects JPEG and WebP. 92 is a good balance. Below 80 the artifacts become visible; above 95 the file grows without a noticeable quality gain.</p>
+          <h4>Transparency</h4>
+          <p>Converting a transparent PNG to JPEG flattens it onto a white background, because JPEG has no alpha channel. If you need transparency preserved, pick PNG or WebP.</p>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    <p>No ads. No tracking. Support this project here - 80% of proceeds go to translifeline.</p>
+    <a class="kofi" href="https://ko-fi.com/arcelyy" target="_blank" rel="noopener noreferrer">
+      Support on Ko-fi
+    </a>
+  </footer>
+
+  <noscript>
+    <p style="text-align:center;padding:2rem;color:#9298a3">
+      TransImage runs entirely in your browser and requires JavaScript.
+    </p>
+  </noscript>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
